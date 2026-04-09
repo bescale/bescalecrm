@@ -29,7 +29,9 @@ import AdminLayout from "./components/AdminLayout";
 import AdminEmpresas from "./pages/admin/AdminEmpresas";
 import AdminEmpresaDetalhe from "./pages/admin/AdminEmpresaDetalhe";
 import AdminPlanos from "./pages/admin/AdminPlanos";
+import Checkout from "./pages/Checkout";
 import Assinar from "./pages/Assinar";
+import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,8 +51,10 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/confirm" element={<ConfirmEmail />} />
             <Route path="/planos" element={<Planos />} />
+            <Route path="/checkout" element={<Checkout />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/assinar/:token" element={<Assinar />} />
+            <Route path="/accept-invite" element={<AcceptInvite />} />
 
             {/* Protected */}
             <Route element={<ProtectedRoute />}>

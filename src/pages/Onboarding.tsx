@@ -5,6 +5,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Building, Users, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+function formatCNPJ(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  return digits
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+}
+
 type Mode = null | "create" | "join";
 
 export default function Onboarding() {
@@ -24,6 +33,11 @@ export default function Onboarding() {
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cnpjDigits = cnpj.replace(/\D/g, "");
+    if (cnpjDigits.length !== 14) {
+      toast({ title: "CNPJ inválido", description: "Informe um CNPJ válido com 14 dígitos.", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     const { error } = await supabase.rpc("create_company_and_assign", {
       _name: companyName,
@@ -33,7 +47,7 @@ export default function Onboarding() {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
       await refreshProfile();
-      navigate("/");
+      navigate("/checkout", { state: { selectedPlan: "essential" } });
     }
     setSubmitting(false);
   };
@@ -125,11 +139,12 @@ export default function Onboarding() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">CNPJ <span className="text-muted-foreground">(opcional)</span></label>
+              <label className="text-sm font-medium">CNPJ *</label>
               <input
                 type="text"
+                required
                 value={cnpj}
-                onChange={(e) => setCnpj(e.target.value)}
+                onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
                 placeholder="00.000.000/0001-00"
                 className="w-full rounded-lg border bg-background py-2.5 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />

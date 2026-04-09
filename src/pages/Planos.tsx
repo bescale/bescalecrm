@@ -110,10 +110,8 @@ export default function Planos() {
       return;
     }
 
-    // For Essential and Advanced, proceed to onboarding
-    // The actual payment integration (Asaas) will be added in the billing feature
-    // For now, store the selected plan and redirect to onboarding
-    navigate("/onboarding", { state: { selectedPlan: planId } });
+    // Proceed to checkout for payment
+    navigate("/checkout", { state: { selectedPlan: planId } });
     setSubmitting(false);
   };
 
