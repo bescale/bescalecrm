@@ -20,12 +20,12 @@ serve(async (req) => {
     const event = data.event;
     const sessionName = data.session;
 
-    // Ignore messages sent by the bot itself
-    if (event === "message" && data.payload?.fromMe) {
-      return ok({ skipped: "fromMe" });
-    }
-
-    if (event === "message") {
+    if (event === "message" || event === "message.any") {
+      // "message" = incoming only; "message.any" = all (including fromMe)
+      // For "message.any" we only process fromMe to avoid duplicating incoming
+      if (event === "message.any" && !data.payload?.fromMe) {
+        return ok();
+      }
       await handleMessage(db, sessionName, data);
     } else if (event === "message.reaction") {
       await handleReaction(db, sessionName, data.payload);
@@ -55,6 +55,7 @@ function ok(extra?: Record<string, unknown>) {
 async function handleMessage(db: any, sessionName: string, data: any) {
   const payload = data.payload;
   const { from, body, hasMedia, id, timestamp } = payload;
+  const fromMe = !!payload.fromMe;
 
   // 1. Find session
   const { data: session, error: sessErr } = await db
@@ -94,26 +95,32 @@ async function handleMessage(db: any, sessionName: string, data: any) {
     phone = from.replace(/@.*$/, "").replace(/\D/g, "");
   }
 
-  // 3. Get contact name from webhook payload
-  let contactName = payload._data?.notifyName || "";
-  if (!contactName) {
-    try {
-      const contactInfo = await wahaJson<{ pushname?: string; name?: string }>(
-        `/api/contacts?session=${sessionName}&contactId=${encodeURIComponent(chatId)}`
-      );
-      contactName = contactInfo?.pushname || contactInfo?.name || "";
-    } catch { /* keep empty */ }
-  }
-  if (!contactName) contactName = phone;
-
-  // 4. Get profile picture
+  // 3. Get contact name from webhook payload (skip for fromMe — contact already exists)
+  let contactName = "";
   let avatarUrl: string | null = null;
-  try {
-    const pic = await wahaJson<{ profilePictureURL?: string }>(
-      `/api/contacts/profile-picture?session=${sessionName}&contactId=${encodeURIComponent(chatId)}`
-    );
-    if (pic?.profilePictureURL) avatarUrl = pic.profilePictureURL;
-  } catch { /* no picture */ }
+
+  if (!fromMe) {
+    contactName = payload._data?.notifyName || "";
+    if (!contactName) {
+      try {
+        const contactInfo = await wahaJson<{ pushname?: string; name?: string }>(
+          `/api/contacts?session=${sessionName}&contactId=${encodeURIComponent(chatId)}`
+        );
+        contactName = contactInfo?.pushname || contactInfo?.name || "";
+      } catch { /* keep empty */ }
+    }
+    if (!contactName) contactName = phone;
+
+    // 4. Get profile picture
+    try {
+      const pic = await wahaJson<{ profilePictureURL?: string }>(
+        `/api/contacts/profile-picture?session=${sessionName}&contactId=${encodeURIComponent(chatId)}`
+      );
+      if (pic?.profilePictureURL) avatarUrl = pic.profilePictureURL;
+    } catch { /* no picture */ }
+  } else {
+    contactName = phone;
+  }
 
   // 5. Find or create contact
   let { data: contact } = await db
@@ -188,21 +195,47 @@ async function handleMessage(db: any, sessionName: string, data: any) {
     conversation = newConv;
   }
 
-  // 7. Deduplication
-  const { data: existing } = await db
+  // 7. Deduplication — check by waha_message_id
+  const { data: existingById } = await db
     .from("messages")
     .select("id")
     .eq("conversation_id", conversation.id)
     .contains("metadata", { waha_message_id: id })
     .maybeSingle();
 
-  if (existing) return;
+  if (existingById) return;
+
+  // 7b. For fromMe: also check if the frontend already inserted a recent
+  //     message with the same content (race condition: webhook can arrive
+  //     before the frontend's DB insert includes the waha_message_id).
+  if (fromMe) {
+    const thirtySecsAgo = new Date(Date.now() - 30_000).toISOString();
+    const { data: recentMatch } = await db
+      .from("messages")
+      .select("id, metadata")
+      .eq("conversation_id", conversation.id)
+      .eq("sender_type", "human")
+      .eq("content", body || "")
+      .gte("created_at", thirtySecsAgo)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentMatch) {
+      // Update the frontend message with the waha_message_id for future dedup
+      await db
+        .from("messages")
+        .update({ metadata: { ...recentMatch.metadata, waha_message_id: id } })
+        .eq("id", recentMatch.id);
+      return;
+    }
+  }
 
   // 8. Insert message
   const messageData: any = {
     conversation_id: conversation.id,
     content: body || "",
-    sender_type: "lead",
+    sender_type: fromMe ? "human" : "lead",
     metadata: { waha_message_id: id, timestamp, chat_id: chatId },
   };
 
@@ -228,12 +261,15 @@ async function handleMessage(db: any, sessionName: string, data: any) {
   if (msgErr) throw msgErr;
 
   // 9. Update conversation
+  const convUpdate: Record<string, unknown> = {
+    last_message_at: new Date().toISOString(),
+  };
+  if (!fromMe) {
+    convUpdate.unread_count = (conversation.unread_count || 0) + 1;
+  }
   await db
     .from("conversations")
-    .update({
-      last_message_at: new Date().toISOString(),
-      unread_count: (conversation.unread_count || 0) + 1,
-    })
+    .update(convUpdate)
     .eq("id", conversation.id);
 }
 

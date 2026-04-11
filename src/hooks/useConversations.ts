@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface ConversationWithContact {
   id: string;
+  company_id: string;
   status: string;
   channel: string;
   unread_count: number;
@@ -49,7 +50,7 @@ export function useConversations() {
         .from("conversations")
         .select(
           `
-          id, status, channel, unread_count, last_message_at, created_at, session_id, assigned_to,
+          id, company_id, status, channel, unread_count, last_message_at, created_at, session_id, assigned_to,
           contacts(id, name, phone, email, company_name, score, origin, notes, custom_fields, contact_tags(tag_id, tags(id, name, color))),
           profiles!conversations_assigned_to_fkey(id, full_name),
           whatsapp_sessions(name)

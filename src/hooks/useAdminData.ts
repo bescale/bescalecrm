@@ -94,15 +94,13 @@ export function useCompanyMembers(companyId: string | undefined) {
     queryKey: ["admin-company-members", companyId],
     enabled: !!companyId,
     queryFn: async () => {
+      // Use SECURITY DEFINER RPC to bypass RLS (super_admin only)
       const { data: profiles, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url, phone, is_active, created_at")
-        .eq("company_id", companyId!)
-        .order("created_at", { ascending: true });
+        .rpc("get_company_profiles", { _company_id: companyId! });
       if (error) throw error;
+      if (!profiles || profiles.length === 0) return [];
 
-      const memberIds = profiles.map((p) => p.id);
-      if (memberIds.length === 0) return [];
+      const memberIds = profiles.map((p: any) => p.id);
 
       const { data: roles } = await supabase
         .from("user_roles")
@@ -112,7 +110,7 @@ export function useCompanyMembers(companyId: string | undefined) {
       const roleMap = new Map<string, string>();
       roles?.forEach((r) => roleMap.set(r.user_id, r.role));
 
-      return profiles.map((p) => ({
+      return profiles.map((p: any) => ({
         ...p,
         role: roleMap.get(p.id) || null,
       }));

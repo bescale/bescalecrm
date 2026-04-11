@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Users,
+  User,
   Copy,
   Check,
   Loader2,
@@ -21,6 +22,7 @@ type AppRole = "agent" | "viewer";
 interface TeamMember {
   id: string;
   full_name: string;
+  email: string | null;
   avatar_url: string | null;
   phone: string | null;
   is_active: boolean;
@@ -99,6 +101,7 @@ export default function ConfigEquipe() {
 
   // Invite form
   const [showInvite, setShowInvite] = useState(false);
+  const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("agent");
   const [sending, setSending] = useState(false);
@@ -132,7 +135,7 @@ export default function ConfigEquipe() {
 
     const { data: profiles, error } = await supabase
       .from("profiles")
-      .select("id, full_name, avatar_url, phone, is_active, created_at")
+      .select("id, full_name, email, avatar_url, phone, is_active, created_at")
       .eq("company_id", profile.company_id)
       .order("created_at", { ascending: true });
 
@@ -172,7 +175,12 @@ export default function ConfigEquipe() {
   }
 
   async function handleSendInvite() {
+    const name = inviteName.trim();
     const email = inviteEmail.trim();
+    if (!name) {
+      toast.error("Informe o nome do convidado");
+      return;
+    }
     if (!email) {
       toast.error("Informe o email do convidado");
       return;
@@ -183,7 +191,7 @@ export default function ConfigEquipe() {
       // Same pattern as whatsapp-messages (no custom headers — client sends JWT automatically)
       const { data, error } = await supabase.functions.invoke(
         "invite-member",
-        { body: { email, role: inviteRole } },
+        { body: { email, name, role: inviteRole } },
       );
 
       if (error || data?.error) {
@@ -200,6 +208,7 @@ export default function ConfigEquipe() {
         toast.info("Link de convite copiado para a área de transferência");
       }
 
+      setInviteName("");
       setInviteEmail("");
       setShowInvite(false);
       fetchMembers();
@@ -310,6 +319,22 @@ export default function ConfigEquipe() {
           <div className="space-y-3 pt-1">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-muted-foreground">
+                Nome do convidado
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  placeholder="Nome completo"
+                  className="w-full rounded-lg border bg-secondary/50 py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">
                 Email do convidado
               </label>
               <div className="relative">
@@ -371,6 +396,7 @@ export default function ConfigEquipe() {
               <button
                 onClick={() => {
                   setShowInvite(false);
+                  setInviteName("");
                   setInviteEmail("");
                 }}
                 className="rounded-lg border px-4 py-2.5 text-sm hover:bg-secondary transition-colors"
@@ -461,6 +487,14 @@ export default function ConfigEquipe() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
+                      {member.email && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          {member.email}
+                        </span>
+                      )}
+                      {member.email && member.phone && (
+                        <span className="text-muted-foreground text-xs">·</span>
+                      )}
                       {member.phone && (
                         <span className="text-xs text-muted-foreground">
                           {member.phone}

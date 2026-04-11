@@ -37,9 +37,10 @@ function useProfiles(companyId: string | null) {
         .from("profiles")
         .select("id, full_name, avatar_url")
         .eq("company_id", companyId!)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .neq("full_name", "");
       if (error) throw error;
-      return data as { id: string; full_name: string; avatar_url: string | null }[];
+      return (data ?? []).filter((p) => p.full_name?.trim()) as { id: string; full_name: string; avatar_url: string | null }[];
     },
     enabled: !!companyId,
   });
@@ -263,10 +264,11 @@ export default function ContactSidebar({ conversation }: ContactSidebarProps) {
   }, [contact.id, contact.notes]);
 
   const { profile } = useAuth();
-  const { data: allTags } = useCompanyTags(profile?.company_id || null);
+  const conversationCompanyId = conversation.company_id || profile?.company_id || null;
+  const { data: allTags } = useCompanyTags(conversationCompanyId);
   const { data: contactTags, isLoading: loadingTags } = useContactTags(contact.id);
   const { data: opportunities } = useContactOpportunities(contact.id);
-  const { data: profiles } = useProfiles(profile?.company_id || null);
+  const { data: profiles } = useProfiles(conversationCompanyId);
   const assignConversation = useAssignConversation();
   const saveNotes = useSaveContactNotes();
   const addTag = useAddContactTag();

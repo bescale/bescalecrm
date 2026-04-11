@@ -76,6 +76,7 @@ serve(async (req: Request) => {
     const email = String(body.email ?? "")
       .trim()
       .toLowerCase();
+    const name = String(body.name ?? "").trim();
     const role = String(body.role ?? "");
 
     if (!email || !email.includes("@")) return fail("Email inválido");
@@ -147,7 +148,7 @@ serve(async (req: Request) => {
         // Profile missing (trigger may have failed) — create it
         const { error: e } = await admin
           .from("profiles")
-          .insert({ id: existingUser.id, full_name: "", company_id: companyId });
+          .insert({ id: existingUser.id, full_name: name, company_id: companyId });
         if (e) return fail("Erro ao criar perfil: " + e.message);
       }
 
@@ -172,7 +173,7 @@ serve(async (req: Request) => {
     const { data: invited, error: inviteErr } =
       await admin.auth.admin.inviteUserByEmail(email, {
         data: {
-          full_name: "",
+          full_name: name,
           invite_company_id: companyId,
           invite_role: role,
         },
@@ -189,7 +190,7 @@ serve(async (req: Request) => {
           email,
           options: {
             data: {
-              full_name: "",
+              full_name: name,
               invite_company_id: companyId,
               invite_role: role,
             },

@@ -148,7 +148,7 @@ serve(async (req) => {
       const conv = await getConversation(db, conversation_id, companyId);
       const chatId = getChatId(conv.contacts);
 
-      await wahaJson(`/api/sendLocation`, {
+      const wahaLocResp = await wahaJson<{ id?: string }>(`/api/sendLocation`, {
         method: "POST",
         body: JSON.stringify({
           session: conv.whatsapp_sessions.waha_instance_id,
@@ -169,7 +169,7 @@ serve(async (req) => {
           sender_type: "human",
           sender_id: userId,
           media_type: "location",
-          metadata: { location: { latitude, longitude, name, address } },
+          metadata: { location: { latitude, longitude, name, address }, waha_message_id: wahaLocResp?.id || null },
         })
         .select()
         .single();
@@ -194,7 +194,7 @@ serve(async (req) => {
       const conv = await getConversation(db, conversation_id, companyId);
       const chatId = getChatId(conv.contacts);
 
-      await wahaJson(`/api/sendContactVcard`, {
+      const wahaContactResp = await wahaJson<{ id?: string }>(`/api/sendContactVcard`, {
         method: "POST",
         body: JSON.stringify({
           session: conv.whatsapp_sessions.waha_instance_id,
@@ -216,7 +216,7 @@ serve(async (req) => {
           sender_type: "human",
           sender_id: userId,
           media_type: "contact",
-          metadata: { contact: { name: contact_name, phone: contact_phone } },
+          metadata: { contact: { name: contact_name, phone: contact_phone }, waha_message_id: wahaContactResp?.id || null },
         })
         .select()
         .single();
@@ -264,7 +264,7 @@ serve(async (req) => {
       } else {
         wahaBody.caption = caption || "";
       }
-      await wahaJson(`/api/${endpoint}`, {
+      const wahaMediaResp = await wahaJson<{ id?: string }>(`/api/${endpoint}`, {
         method: "POST",
         body: JSON.stringify(wahaBody),
       });
@@ -278,6 +278,7 @@ serve(async (req) => {
           sender_id: userId,
           media_url,
           media_type,
+          metadata: { waha_message_id: wahaMediaResp?.id || null },
         })
         .select()
         .single();
@@ -317,10 +318,12 @@ serve(async (req) => {
       }
     }
 
-    await wahaJson(`/api/sendText`, {
+    const wahaResp = await wahaJson<{ id?: string }>(`/api/sendText`, {
       method: "POST",
       body: JSON.stringify(textBody),
     });
+
+    const msgMetadata = { ...(metadata || {}), waha_message_id: wahaResp?.id || null };
 
     const { data: message, error } = await db
       .from("messages")
@@ -329,7 +332,7 @@ serve(async (req) => {
         content,
         sender_type: "human",
         sender_id: userId,
-        metadata: metadata || null,
+        metadata: msgMetadata,
       })
       .select()
       .single();

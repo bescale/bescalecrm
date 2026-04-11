@@ -1,17 +1,22 @@
 import { Building, Users, Clock, Tag, MessageSquare, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useUserRole } from "@/hooks/useUserRole";
 
-const sections = [
-  { icon: Smartphone, title: "WhatsApp", description: "Gerenciar sessões e conexões do WhatsApp", path: "/configuracoes/whatsapp" },
-  { icon: Building, title: "Dados da Empresa", description: "Nome, CNPJ, logo e informações de contato", path: "/configuracoes/empresa" },
-  { icon: Users, title: "Equipe", description: "Gerenciar colaboradores e permissões", path: "/configuracoes/equipe" },
-  { icon: Clock, title: "Horário de Atendimento", description: "Definir horários de operação e mensagens de ausência", path: "/configuracoes/horarios" },
-  { icon: Tag, title: "Etiquetas", description: "Criar e gerenciar etiquetas para conversas e contatos", path: "/configuracoes/etiquetas" },
-  { icon: MessageSquare, title: "Respostas Rápidas", description: "Templates de mensagens para agilizar o atendimento", path: "/configuracoes/respostas-rapidas" },
+const allSections = [
+  { icon: Smartphone, title: "WhatsApp", description: "Gerenciar sessões e conexões do WhatsApp", path: "/configuracoes/whatsapp", adminOnly: true },
+  { icon: Building, title: "Dados da Empresa", description: "Nome, CNPJ, logo e informações de contato", path: "/configuracoes/empresa", adminOnly: true },
+  { icon: Users, title: "Equipe", description: "Gerenciar colaboradores e permissões", path: "/configuracoes/equipe", adminOnly: true },
+  { icon: Clock, title: "Horário de Atendimento", description: "Definir horários de operação e mensagens de ausência", path: "/configuracoes/horarios", adminOnly: false },
+  { icon: Tag, title: "Etiquetas", description: "Criar e gerenciar etiquetas para conversas e contatos", path: "/configuracoes/etiquetas", adminOnly: false },
+  { icon: MessageSquare, title: "Respostas Rápidas", description: "Templates de mensagens para agilizar o atendimento", path: "/configuracoes/respostas-rapidas", adminOnly: false },
 ];
 
 export default function Configuracoes() {
   const navigate = useNavigate();
+  const { data: role } = useUserRole();
+
+  const isAdmin = role === "admin" || role === "super_admin";
+  const sections = allSections.filter((s) => !s.adminOnly || isAdmin);
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
