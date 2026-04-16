@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 
 type AppRole = "agent" | "viewer";
 
@@ -93,6 +94,7 @@ async function extractInvokeError(data: unknown, error: any): Promise<string> {
 export default function ConfigEquipe() {
   const navigate = useNavigate();
   const { profile, user } = useAuth();
+  const { plan, canAddUser, formatLimit } = usePlanLimits();
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -300,13 +302,33 @@ export default function ConfigEquipe() {
         </div>
       </div>
 
+      {/* Plan limit info */}
+      {plan && (
+        <div className="flex items-center gap-2 rounded-lg bg-secondary/50 px-4 py-2.5 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          <span>
+            Membros: {members.length} / {formatLimit(plan.max_users)}
+            <span className="ml-1 text-muted-foreground/60">({plan.name})</span>
+          </span>
+        </div>
+      )}
+
       {/* Invite section */}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm">Convidar membro</h3>
           {!showInvite && (
             <button
-              onClick={() => setShowInvite(true)}
+              onClick={async () => {
+                const check = await canAddUser();
+                if (!check.allowed) {
+                  toast.error(
+                    `Limite do plano atingido: ${check.current}/${formatLimit(check.limit)} membros. Faça upgrade para adicionar mais.`
+                  );
+                  return;
+                }
+                setShowInvite(true);
+              }}
               className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <UserPlus className="h-4 w-4" />

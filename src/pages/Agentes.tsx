@@ -1,4 +1,6 @@
 import { Bot, Plus, MoreVertical, Zap, Clock, MessageSquare, Power } from "lucide-react";
+import { toast } from "sonner";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 
 const agents = [
   {
@@ -37,6 +39,19 @@ const agents = [
 ];
 
 export default function Agentes() {
+  const { plan, canAddAgent, formatLimit } = usePlanLimits();
+
+  const handleNewAgent = async () => {
+    const check = await canAddAgent();
+    if (!check.allowed) {
+      toast.error(
+        `Limite do plano atingido: ${check.current}/${formatLimit(check.limit)} agentes de IA. Faça upgrade para adicionar mais.`
+      );
+      return;
+    }
+    // TODO: abrir modal de criação de agente
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -44,10 +59,27 @@ export default function Agentes() {
           <h1 className="text-2xl font-bold">Agentes de IA</h1>
           <p className="text-muted-foreground text-sm">Configure e gerencie seus agentes inteligentes</p>
         </div>
-        <button className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+        <button
+          onClick={handleNewAgent}
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
           <Plus className="h-4 w-4" /> Novo Agente
         </button>
       </div>
+
+      {/* Plan limit info */}
+      {plan && (
+        <div className="flex items-center gap-2 rounded-lg bg-secondary/50 px-4 py-2.5 text-xs text-muted-foreground">
+          <Bot className="h-3.5 w-3.5" />
+          <span>
+            Agentes de IA: {agents.length} / {formatLimit(plan.max_agents)}
+            <span className="ml-1 text-muted-foreground/60">({plan.name})</span>
+          </span>
+          {!plan.ai_enabled && (
+            <span className="ml-2 text-amber-500 font-medium">IA não disponível neste plano</span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {agents.map((agent) => (

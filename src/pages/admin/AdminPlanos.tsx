@@ -15,102 +15,24 @@ import {
   Clock,
   ExternalLink,
   Ban,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useAdminCompanies,
+  useAdminPlans,
+  useUpdatePlan,
   useSubscriptionLinks,
   useCreateSubscriptionLink,
   useExpireSubscriptionLink,
 } from "@/hooks/useAdminData";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface PlanDefinition {
-  id: string;
-  name: string;
-  price: string;
-  color: string;
-  features: {
-    max_sessions: number;
-    max_members: number;
-    max_agents: number;
-    max_contacts: number;
-    ai_enabled: boolean;
-    priority_support: boolean;
-    custom_branding: boolean;
-    api_access: boolean;
-  };
-}
-
-const defaultPlans: PlanDefinition[] = [
-  {
-    id: "free",
-    name: "Gratuito",
-    price: "R$ 0",
-    color: "bg-gray-500/15 text-gray-400 border-gray-500/20",
-    features: {
-      max_sessions: 1,
-      max_members: 2,
-      max_agents: 0,
-      max_contacts: 100,
-      ai_enabled: false,
-      priority_support: false,
-      custom_branding: false,
-      api_access: false,
-    },
-  },
-  {
-    id: "starter",
-    name: "Starter",
-    price: "R$ 97",
-    color: "bg-blue-500/15 text-blue-400 border-blue-500/20",
-    features: {
-      max_sessions: 2,
-      max_members: 5,
-      max_agents: 1,
-      max_contacts: 1000,
-      ai_enabled: true,
-      priority_support: false,
-      custom_branding: false,
-      api_access: false,
-    },
-  },
-  {
-    id: "professional",
-    name: "Profissional",
-    price: "R$ 197",
-    color: "bg-primary/15 text-primary border-primary/20",
-    features: {
-      max_sessions: 5,
-      max_members: 15,
-      max_agents: 5,
-      max_contacts: 10000,
-      ai_enabled: true,
-      priority_support: true,
-      custom_branding: true,
-      api_access: false,
-    },
-  },
-  {
-    id: "enterprise",
-    name: "Empresarial",
-    price: "R$ 497",
-    color: "bg-amber-500/15 text-amber-400 border-amber-500/20",
-    features: {
-      max_sessions: -1,
-      max_members: -1,
-      max_agents: -1,
-      max_contacts: -1,
-      ai_enabled: true,
-      priority_support: true,
-      custom_branding: true,
-      api_access: true,
-    },
-  },
-];
+type PlanRow = Tables<"plans">;
 
 const featureLabels: Record<string, { label: string; icon: typeof Users }> = {
-  max_sessions: { label: "Sessões WhatsApp", icon: Smartphone },
-  max_members: { label: "Membros da equipe", icon: Users },
+  max_whatsapp_sessions: { label: "Sessões WhatsApp", icon: Smartphone },
+  max_users: { label: "Membros da equipe", icon: Users },
   max_agents: { label: "Agentes de IA", icon: Bot },
   max_contacts: { label: "Contatos", icon: Users },
   ai_enabled: { label: "IA habilitada", icon: Bot },
@@ -119,17 +41,20 @@ const featureLabels: Record<string, { label: string; icon: typeof Users }> = {
   api_access: { label: "Acesso à API", icon: Check },
 };
 
+const featureKeys = Object.keys(featureLabels);
+
 const planBadgeColors: Record<string, string> = {
   free: "bg-gray-500/15 text-gray-400",
-  starter: "bg-blue-500/15 text-blue-400",
-  professional: "bg-primary/15 text-primary",
+  essential: "bg-blue-500/15 text-blue-400",
+  advanced: "bg-primary/15 text-primary",
   enterprise: "bg-amber-500/15 text-amber-400",
 };
 
 export default function AdminPlanos() {
-  const [plans, setPlans] = useState<PlanDefinition[]>(defaultPlans);
+  const { data: plans, isLoading: plansLoading } = useAdminPlans();
+  const updatePlan = useUpdatePlan();
   const [editingPlan, setEditingPlan] = useState<string | null>(null);
-  const [editedPlan, setEditedPlan] = useState<PlanDefinition | null>(null);
+  const [editedPlan, setEditedPlan] = useState<Partial<PlanRow> | null>(null);
 
   const { data: companies } = useAdminCompanies();
   const { data: subscriptionLinks } = useSubscriptionLinks();
@@ -141,9 +66,9 @@ export default function AdminPlanos() {
   const [generatedLink, setGeneratedLink] = useState<{ companyId: string; url: string } | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
-  function startEdit(plan: PlanDefinition) {
+  function startEdit(plan: PlanRow) {
     setEditingPlan(plan.id);
-    setEditedPlan({ ...plan, features: { ...plan.features } });
+    setEditedPlan({ ...plan });
   }
 
   function cancelEdit() {
@@ -152,10 +77,14 @@ export default function AdminPlanos() {
   }
 
   function saveEdit() {
-    if (!editedPlan) return;
-    setPlans((prev) => prev.map((p) => (p.id === editedPlan.id ? editedPlan : p)));
-    setEditingPlan(null);
-    setEditedPlan(null);
+    if (!editedPlan || !editingPlan) return;
+    const { id, created_at, updated_at, ...payload } = editedPlan as PlanRow;
+    updatePlan.mutate({ id: editingPlan, ...payload }, {
+      onSuccess: () => {
+        setEditingPlan(null);
+        setEditedPlan(null);
+      },
+    });
   }
 
   function formatLimit(value: number) {
@@ -164,11 +93,20 @@ export default function AdminPlanos() {
   }
 
   function getCompanyCount(planId: string) {
-    return companies?.filter((c) => c.plan === planId).length || 0;
+    return companies?.filter((c) => (c as any).plan_id === planId || c.plan === planId).length || 0;
+  }
+
+  function getFeatureValue(plan: Partial<PlanRow>, key: string): boolean | number {
+    return (plan as any)[key];
+  }
+
+  function setFeatureValue(key: string, value: boolean | number) {
+    if (!editedPlan) return;
+    setEditedPlan({ ...editedPlan, [key]: value });
   }
 
   function handleGenerateLink(companyId: string, planId: string) {
-    const planDef = plans.find((p) => p.id === planId);
+    const planDef = plans?.find((p) => p.id === planId);
     if (!planDef) return;
 
     createLink.mutate(
@@ -176,7 +114,7 @@ export default function AdminPlanos() {
         company_id: companyId,
         plan: planId,
         plan_name: planDef.name,
-        plan_price: planDef.price,
+        plan_price: planDef.price_label,
       },
       {
         onSuccess: (data) => {
@@ -210,6 +148,14 @@ export default function AdminPlanos() {
     pendingLinksMap.set(link.company_id, arr);
   });
 
+  if (plansLoading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-8">
       {/* Header */}
@@ -224,7 +170,7 @@ export default function AdminPlanos() {
       <div>
         <h2 className="text-lg font-semibold mb-4">Planos do sistema</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {plans.map((plan) => {
+          {plans?.map((plan) => {
             const isEditing = editingPlan === plan.id;
             const current = isEditing && editedPlan ? editedPlan : plan;
             const companyCount = getCompanyCount(plan.id);
@@ -242,16 +188,16 @@ export default function AdminPlanos() {
                     {isEditing ? (
                       <div className="space-y-2">
                         <input
-                          value={current.name}
+                          value={current.name || ""}
                           onChange={(e) =>
                             setEditedPlan({ ...current, name: e.target.value })
                           }
                           className="w-full rounded-lg border bg-secondary/50 py-1.5 px-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/30"
                         />
                         <input
-                          value={current.price}
+                          value={current.price_label || ""}
                           onChange={(e) =>
-                            setEditedPlan({ ...current, price: e.target.value })
+                            setEditedPlan({ ...current, price_label: e.target.value })
                           }
                           placeholder="R$ 0"
                           className="w-full rounded-lg border bg-secondary/50 py-1.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
@@ -261,10 +207,12 @@ export default function AdminPlanos() {
                       <>
                         <h3 className="font-bold text-sm">{plan.name}</h3>
                         <p className="text-xl font-bold mt-1">
-                          {plan.price}
-                          <span className="text-xs font-normal text-muted-foreground">
-                            /mês
-                          </span>
+                          {plan.price_label}
+                          {plan.price > 0 && (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              /mês
+                            </span>
+                          )}
                         </p>
                       </>
                     )}
@@ -289,9 +237,9 @@ export default function AdminPlanos() {
 
                 {/* Features list */}
                 <div className="space-y-2 border-t pt-3">
-                  {Object.entries(current.features).map(([key, value]) => {
+                  {featureKeys.map((key) => {
                     const feat = featureLabels[key];
-                    if (!feat) return null;
+                    const value = getFeatureValue(current, key);
                     const isBool = typeof value === "boolean";
 
                     return (
@@ -303,15 +251,7 @@ export default function AdminPlanos() {
                         {isEditing ? (
                           isBool ? (
                             <button
-                              onClick={() =>
-                                setEditedPlan({
-                                  ...current,
-                                  features: {
-                                    ...current.features,
-                                    [key]: !value,
-                                  },
-                                })
-                              }
+                              onClick={() => setFeatureValue(key, !value)}
                               className={`rounded-full p-0.5 transition-colors ${
                                 value
                                   ? "bg-green-500/20 text-green-500"
@@ -329,13 +269,7 @@ export default function AdminPlanos() {
                               type="number"
                               value={value as number}
                               onChange={(e) =>
-                                setEditedPlan({
-                                  ...current,
-                                  features: {
-                                    ...current.features,
-                                    [key]: parseInt(e.target.value) || 0,
-                                  },
-                                })
+                                setFeatureValue(key, parseInt(e.target.value) || 0)
                               }
                               className="w-20 rounded border bg-secondary/50 py-1 px-2 text-xs text-right outline-none focus:ring-2 focus:ring-primary/30"
                             />
@@ -361,10 +295,11 @@ export default function AdminPlanos() {
                   <div className="flex gap-2 pt-2 border-t">
                     <button
                       onClick={saveEdit}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                      disabled={updatePlan.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                     >
                       <Save className="h-3.5 w-3.5" />
-                      Salvar
+                      {updatePlan.isPending ? "Salvando..." : "Salvar"}
                     </button>
                     <button
                       onClick={cancelEdit}
@@ -400,7 +335,8 @@ export default function AdminPlanos() {
           ) : (
             <div className="divide-y divide-border">
               {companies?.map((company) => {
-                const planDef = plans.find((p) => p.id === company.plan);
+                const companyPlanId = (company as any).plan_id || company.plan;
+                const planDef = plans?.find((p) => p.id === companyPlanId);
                 const isAssigning = assigningCompanyId === company.id;
                 const justGenerated =
                   generatedLink?.companyId === company.id ? generatedLink : null;
@@ -437,10 +373,10 @@ export default function AdminPlanos() {
                       {/* Current plan */}
                       <span
                         className={`text-[10px] font-medium px-2.5 py-0.5 rounded-full w-fit ${
-                          planBadgeColors[company.plan] || "bg-gray-500/15 text-gray-400"
+                          planBadgeColors[companyPlanId] || "bg-gray-500/15 text-gray-400"
                         }`}
                       >
-                        {planDef?.name || company.plan}
+                        {planDef?.name || companyPlanId}
                       </span>
 
                       {/* Generate link */}
@@ -448,7 +384,7 @@ export default function AdminPlanos() {
                         {isAssigning ? (
                           <div className="flex items-center gap-2 flex-wrap">
                             {plans
-                              .filter((p) => p.id !== company.plan)
+                              ?.filter((p) => p.id !== companyPlanId)
                               .map((p) => (
                                 <button
                                   key={p.id}
@@ -457,7 +393,7 @@ export default function AdminPlanos() {
                                   className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-secondary hover:text-foreground transition-all disabled:opacity-50"
                                 >
                                   <Link2 className="h-3 w-3" />
-                                  {p.name} — {p.price}
+                                  {p.name} — {p.price_label}
                                 </button>
                               ))}
                             <button

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 type PersonType = "pf" | "pj";
 
@@ -36,11 +37,6 @@ interface CardData {
   expiry: string;
   cvv: string;
 }
-
-const planDetails: Record<string, { name: string; price: string; priceValue: number }> = {
-  essential: { name: "Essential", price: "R$ 597", priceValue: 597 },
-  advanced: { name: "Advanced", price: "R$ 1.497", priceValue: 1497 },
-};
 
 function formatCPF(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -90,6 +86,20 @@ export default function Checkout() {
 
   const selectedPlan = (location.state as { selectedPlan?: string })?.selectedPlan;
 
+  const { data: planData, isLoading: planLoading } = useQuery({
+    queryKey: ["plan-detail", selectedPlan],
+    enabled: !!selectedPlan,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plans")
+        .select("*")
+        .eq("id", selectedPlan!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const [personType, setPersonType] = useState<PersonType>("pj");
   const [billing, setBilling] = useState<BillingData>({
     personType: "pj",
@@ -113,11 +123,11 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
 
-  if (loading) return null;
+  if (loading || planLoading) return null;
   if (!session) return <Navigate to="/login" replace />;
-  if (!selectedPlan || !planDetails[selectedPlan]) return <Navigate to="/planos" replace />;
+  if (!selectedPlan || !planData) return <Navigate to="/planos" replace />;
 
-  const plan = planDetails[selectedPlan];
+  const plan = { name: planData.name, price: planData.price_label, priceValue: planData.price };
 
   function updateBilling(field: keyof BillingData, value: string) {
     setBilling((prev) => ({ ...prev, [field]: value }));

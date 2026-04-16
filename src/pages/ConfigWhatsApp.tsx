@@ -25,6 +25,8 @@ import {
   useSyncSessionStatuses,
 } from "@/hooks/useWhatsAppSessions";
 import SessionSettingsDialog from "@/components/whatsapp/SessionSettingsDialog";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { AlertTriangle } from "lucide-react";
 
 export default function ConfigWhatsApp() {
   const navigate = useNavigate();
@@ -34,6 +36,7 @@ export default function ConfigWhatsApp() {
   const createSession = useCreateSession();
   const sessionAction = useSessionAction();
   const syncStatuses = useSyncSessionStatuses();
+  const { plan, canAddSession, formatLimit } = usePlanLimits();
 
   // Sync real status from WAHA on mount
   useEffect(() => {
@@ -43,6 +46,20 @@ export default function ConfigWhatsApp() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [qrSessionId, setQrSessionId] = useState<string | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+
+  const handleTryCreate = async () => {
+    const check = await canAddSession();
+    if (!check.allowed) {
+      setLimitReached(true);
+      toast.error(
+        `Limite do plano atingido: ${check.current}/${formatLimit(check.limit)} sessões WhatsApp. Faça upgrade para adicionar mais.`
+      );
+      return;
+    }
+    setLimitReached(false);
+    setShowCreate(true);
+  };
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -94,10 +111,21 @@ export default function ConfigWhatsApp() {
         </div>
       </div>
 
+      {/* Plan limit info */}
+      {plan && (
+        <div className="flex items-center gap-2 rounded-lg bg-secondary/50 px-4 py-2.5 text-xs text-muted-foreground">
+          <Smartphone className="h-3.5 w-3.5" />
+          <span>
+            Sessões WhatsApp: {sessions?.length || 0} / {formatLimit(plan.max_whatsapp_sessions)}
+            <span className="ml-1 text-muted-foreground/60">({plan.name})</span>
+          </span>
+        </div>
+      )}
+
       {/* Create session */}
       {!showCreate ? (
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={handleTryCreate}
           className="flex items-center gap-2 rounded-xl border border-dashed bg-card p-4 w-full text-left hover:border-primary/30 transition-all text-sm text-muted-foreground"
         >
           <Plus className="h-5 w-5" />

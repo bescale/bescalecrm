@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { useContacts } from "@/hooks/useContacts";
 import { useWhatsAppSessions } from "@/hooks/useWhatsAppSessions";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { toast } from "sonner";
 
 function getScoreColor(score: number) {
   if (score >= 70) return "text-crm-success";
@@ -44,6 +46,7 @@ const SCORE_OPTIONS = [
 
 export default function Contatos() {
   const { data: sessions = [] } = useWhatsAppSessions();
+  const { plan, canAddContact, formatLimit } = usePlanLimits();
 
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -127,11 +130,34 @@ export default function Contatos() {
           <button className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-secondary transition-colors">
             <Download className="h-4 w-4" /> Exportar
           </button>
-          <button className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+          <button
+            onClick={async () => {
+              const check = await canAddContact();
+              if (!check.allowed) {
+                toast.error(
+                  `Limite do plano atingido: ${check.current}/${formatLimit(check.limit)} contatos. Faça upgrade para adicionar mais.`
+                );
+                return;
+              }
+              // TODO: abrir modal de criação de contato
+            }}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
             <Plus className="h-4 w-4" /> Novo Contato
           </button>
         </div>
       </div>
+
+      {/* Plan limit info */}
+      {plan && (
+        <div className="flex items-center gap-2 rounded-lg bg-secondary/50 px-4 py-2.5 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          <span>
+            Contatos: {contacts.length} / {formatLimit(plan.max_contacts)}
+            <span className="ml-1 text-muted-foreground/60">({plan.name})</span>
+          </span>
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div className="flex items-center gap-3">

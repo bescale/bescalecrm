@@ -163,11 +163,12 @@ function CompanyInfoTab({
       name: name.trim(),
       cnpj: cnpj.trim() || null,
       plan,
+      plan_id: plan,
       address: address.trim() || null,
       business_area: businessArea.trim() || null,
       description: description.trim() || null,
       products_services: productsServices.trim() || null,
-    });
+    } as any);
   }
 
   return (

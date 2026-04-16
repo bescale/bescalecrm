@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      plans: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          price: number
+          price_label: string
+          max_whatsapp_sessions: number
+          max_users: number
+          max_agents: number
+          max_contacts: number
+          ai_enabled: boolean
+          priority_support: boolean
+          custom_branding: boolean
+          api_access: boolean
+          is_active: boolean
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          name: string
+          description?: string | null
+          price?: number
+          price_label?: string
+          max_whatsapp_sessions?: number
+          max_users?: number
+          max_agents?: number
+          max_contacts?: number
+          ai_enabled?: boolean
+          priority_support?: boolean
+          custom_branding?: boolean
+          api_access?: boolean
+          is_active?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          price?: number
+          price_label?: string
+          max_whatsapp_sessions?: number
+          max_users?: number
+          max_agents?: number
+          max_contacts?: number
+          ai_enabled?: boolean
+          priority_support?: boolean
+          custom_branding?: boolean
+          api_access?: boolean
+          is_active?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_agents: {
         Row: {
           avg_response_time: number | null
@@ -96,6 +156,7 @@ export type Database = {
           logo_url: string | null
           name: string
           plan: string
+          plan_id: string
           products_services: string | null
           settings: Json | null
           updated_at: string
@@ -112,6 +173,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           plan?: string
+          plan_id?: string
           products_services?: string | null
           settings?: Json | null
           updated_at?: string
@@ -128,11 +190,20 @@ export type Database = {
           logo_url?: string | null
           name?: string
           plan?: string
+          plan_id?: string
           products_services?: string | null
           settings?: Json | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "companies_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contact_tags: {
         Row: {

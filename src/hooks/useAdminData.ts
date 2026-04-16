@@ -69,6 +69,7 @@ export function useUpdateCompany() {
       name?: string;
       cnpj?: string | null;
       plan?: string;
+      plan_id?: string;
       is_active?: boolean;
       address?: string | null;
       business_area?: string | null;
@@ -338,18 +339,92 @@ export function useSignSubscription() {
         .eq("id", linkId);
       if (linkError) throw linkError;
 
-      // 2. Update the company's plan
+      // 2. Update the company's plan and plan_id
       const { error: companyError } = await supabase
         .from("companies")
-        .update({ plan })
+        .update({ plan, plan_id: plan })
         .eq("id", companyId);
       if (companyError) throw companyError;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscription-link"] });
       qc.invalidateQueries({ queryKey: ["admin-companies"] });
+      qc.invalidateQueries({ queryKey: ["company-plan"] });
       toast.success("Assinatura confirmada!");
     },
     onError: (err) => toast.error("Erro ao assinar: " + (err as Error).message),
+  });
+}
+
+// ── Plans CRUD ────────────────────────────────────────────
+
+export function useAdminPlans() {
+  return useQuery({
+    queryKey: ["admin-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plans")
+        .select("*")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useUpdatePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...payload
+    }: {
+      id: string;
+      name?: string;
+      description?: string | null;
+      price?: number;
+      price_label?: string;
+      max_whatsapp_sessions?: number;
+      max_users?: number;
+      max_agents?: number;
+      max_contacts?: number;
+      ai_enabled?: boolean;
+      priority_support?: boolean;
+      custom_branding?: boolean;
+      api_access?: boolean;
+      is_active?: boolean;
+      sort_order?: number;
+    }) => {
+      const { error } = await supabase
+        .from("plans")
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-plans"] });
+      qc.invalidateQueries({ queryKey: ["company-plan"] });
+      toast.success("Plano atualizado!");
+    },
+    onError: (err) => toast.error("Erro: " + (err as Error).message),
+  });
+}
+
+export function useUpdateCompanyPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ companyId, planId }: { companyId: string; planId: string }) => {
+      const { error } = await supabase
+        .from("companies")
+        .update({ plan: planId, plan_id: planId })
+        .eq("id", companyId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-companies"] });
+      qc.invalidateQueries({ queryKey: ["company-plan"] });
+      toast.success("Plano da empresa atualizado!");
+    },
+    onError: (err) => toast.error("Erro: " + (err as Error).message),
   });
 }
