@@ -331,41 +331,13 @@ export function useSubscriptionByToken(token: string | undefined) {
 export function useSignSubscription() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      linkId,
-      companyId,
-      planSlug,
-      planId,
-    }: {
-      linkId: string;
-      companyId: string;
-      planSlug: string;
-      planId: string;
-    }) => {
-      // 1. Accept the subscription link
-      const { error: linkError } = await supabase
-        .from("subscription_links")
-        .update({ status: "accepted", signed_at: new Date().toISOString() })
-        .eq("id", linkId);
-      if (linkError) throw linkError;
-
-      // 2. Resolve plan UUID from slug if needed
-      let resolvedPlanId = planId;
-      if (!planId) {
-        const { data: planRow } = await supabase
-          .from("plans")
-          .select("id")
-          .eq("slug", planSlug)
-          .single();
-        resolvedPlanId = planRow?.id || planId;
-      }
-
-      // 3. Update the company's plan_id (UUID) and plan (slug for legacy)
-      const { error: companyError } = await supabase
-        .from("companies")
-        .update({ plan: planSlug, plan_id: resolvedPlanId } as any)
-        .eq("id", companyId);
-      if (companyError) throw companyError;
+    mutationFn: async ({ linkId }: { linkId: string }) => {
+      const { data, error } = await supabase.rpc("accept_subscription_link", {
+        _link_id: linkId,
+      });
+      if (error) throw error;
+      const result = data as { success: boolean; error?: string };
+      if (!result.success) throw new Error(result.error || "Erro ao aceitar link");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscription-link"] });

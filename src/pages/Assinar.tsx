@@ -93,15 +93,8 @@ export default function Assinar() {
 
   function handleSign() {
     signSubscription.mutate(
-      {
-        linkId: link.id,
-        companyId: link.company_id,
-        planSlug: link.plan,
-        planId: (link as any).plan_id || "",
-      },
-      {
-        onSuccess: () => setSigned(true),
-      }
+      { linkId: link.id },
+      { onSuccess: () => setSigned(true) }
     );
   }
 
