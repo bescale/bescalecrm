@@ -34,16 +34,11 @@ import {
   useCreateSessionAdmin,
   useUpdateSession,
   useDeleteSession,
+  useAdminPlans,
 } from "@/hooks/useAdminData";
 
 type Tab = "info" | "colaboradores" | "instancias";
 
-const planLabels: Record<string, string> = {
-  free: "Gratuito",
-  starter: "Starter",
-  professional: "Profissional",
-  enterprise: "Empresarial",
-};
 
 const roleConfig: Record<string, { label: string; icon: typeof Headphones; class: string }> = {
   super_admin: { label: "Super Admin", icon: Shield, class: "bg-amber-500/15 text-amber-500" },
@@ -106,7 +101,7 @@ export default function AdminEmpresaDetalhe() {
           </div>
           <p className="text-muted-foreground text-sm">
             {company.cnpj || "Sem CNPJ"} &middot; Plano{" "}
-            {planLabels[company.plan] || company.plan}
+            {company.plan}
           </p>
         </div>
       </div>
@@ -147,10 +142,11 @@ function CompanyInfoTab({
   company: any;
 }) {
   const updateCompany = useUpdateCompany();
+  const { data: plans } = useAdminPlans();
 
   const [name, setName] = useState(company.name || "");
   const [cnpj, setCnpj] = useState(company.cnpj || "");
-  const [plan, setPlan] = useState(company.plan || "free");
+  const [selectedSlug, setSelectedSlug] = useState(company.plan || "free");
   const [address, setAddress] = useState(company.address || "");
   const [businessArea, setBusinessArea] = useState(company.business_area || "");
   const [description, setDescription] = useState(company.description || "");
@@ -158,12 +154,13 @@ function CompanyInfoTab({
 
   function handleSave() {
     if (!name.trim()) return;
+    const selectedPlan = plans?.find((p) => p.slug === selectedSlug);
     updateCompany.mutate({
       id: companyId,
       name: name.trim(),
       cnpj: cnpj.trim() || null,
-      plan,
-      plan_id: plan,
+      plan: selectedSlug,
+      plan_id: selectedPlan?.id || undefined,
       address: address.trim() || null,
       business_area: businessArea.trim() || null,
       description: description.trim() || null,
@@ -199,17 +196,17 @@ function CompanyInfoTab({
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-muted-foreground">Plano</label>
           <div className="grid grid-cols-4 gap-2">
-            {Object.entries(planLabels).map(([key, label]) => (
+            {(plans || []).map((p) => (
               <button
-                key={key}
-                onClick={() => setPlan(key)}
+                key={p.slug}
+                onClick={() => setSelectedSlug(p.slug)}
                 className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
-                  plan === key
+                  selectedSlug === p.slug
                     ? "border-primary bg-primary/5 text-primary"
                     : "hover:bg-secondary text-muted-foreground"
                 }`}
               >
-                {label}
+                {p.name}
               </button>
             ))}
           </div>

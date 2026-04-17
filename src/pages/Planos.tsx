@@ -65,13 +65,13 @@ export default function Planos() {
   if (profile?.company_id) return <Navigate to="/" replace />;
 
   // Only show non-free plans for the subscription page
-  const visiblePlans = plans?.filter((p) => p.id !== "free") || [];
+  const visiblePlans = plans?.filter((p) => p.slug !== "free") || [];
 
-  const handleSelectPlan = async (planId: string) => {
-    setSelected(planId);
+  const handleSelectPlan = async (plan: { id: string; slug: string }) => {
+    setSelected(plan.id);
     setSubmitting(true);
 
-    if (planId === "enterprise") {
+    if (plan.slug === "enterprise") {
       window.open(
         "https://wa.me/5511999999999?text=Olá! Tenho interesse no plano Enterprise do Bescale.",
         "_blank"
@@ -80,7 +80,8 @@ export default function Planos() {
       return;
     }
 
-    navigate("/checkout", { state: { selectedPlan: planId } });
+    // Passa o UUID do plano para o checkout
+    navigate("/checkout", { state: { selectedPlan: plan.id } });
     setSubmitting(false);
   };
 
@@ -113,10 +114,10 @@ export default function Planos() {
           "md:grid-cols-1 max-w-lg mx-auto"
         }`}>
           {visiblePlans.map((plan, index) => {
-            const Icon = iconMap[plan.id] || Zap;
-            const colors = iconColorMap[plan.id] || iconColorMap.essential;
+            const Icon = iconMap[plan.slug] || Zap;
+            const colors = iconColorMap[plan.slug] || iconColorMap.essential;
             const isSelected = selected === plan.id;
-            const isHighlight = index === 1 && visiblePlans.length >= 3; // middle plan
+            const isHighlight = index === 1 && visiblePlans.length >= 3;
             const features = buildFeatureList(plan);
 
             const sessionsLabel = plan.max_whatsapp_sessions === -1
@@ -186,12 +187,12 @@ export default function Planos() {
 
                 {/* CTA */}
                 <button
-                  onClick={() => handleSelectPlan(plan.id)}
+                  onClick={() => handleSelectPlan(plan)}
                   disabled={submitting && isSelected}
                   className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all duration-200 disabled:opacity-50 ${
                     isHighlight
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_16px_hsl(172_66%_50%/0.3)] hover:shadow-[0_0_24px_hsl(172_66%_50%/0.45)]"
-                      : plan.id === "enterprise"
+                      : plan.slug === "enterprise"
                         ? "border border-border bg-card text-foreground hover:bg-secondary"
                         : "bg-secondary text-foreground hover:bg-secondary/80"
                   }`}
@@ -200,7 +201,7 @@ export default function Planos() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      {plan.id === "enterprise" ? "Falar com vendas" : "Começar agora"}
+                      {plan.slug === "enterprise" ? "Falar com vendas" : "Começar agora"}
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}

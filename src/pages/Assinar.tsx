@@ -96,7 +96,8 @@ export default function Assinar() {
       {
         linkId: link.id,
         companyId: link.company_id,
-        plan: link.plan,
+        planSlug: link.plan,
+        planId: (link as any).plan_id || "",
       },
       {
         onSuccess: () => setSigned(true),

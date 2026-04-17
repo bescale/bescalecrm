@@ -17,6 +17,7 @@ export type Database = {
       plans: {
         Row: {
           id: string
+          slug: string
           name: string
           description: string | null
           price: number
@@ -35,7 +36,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          id: string
+          id?: string
+          slug: string
           name: string
           description?: string | null
           price?: number
@@ -55,6 +57,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          slug?: string
           name?: string
           description?: string | null
           price?: number

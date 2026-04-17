@@ -11,27 +11,23 @@ import {
   Smartphone,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAdminCompanies, useCreateCompany, useUpdateCompany } from "@/hooks/useAdminData";
-
-const planLabels: Record<string, string> = {
-  free: "Gratuito",
-  starter: "Starter",
-  professional: "Profissional",
-  enterprise: "Empresarial",
-};
+import { useAdminCompanies, useCreateCompany, useUpdateCompany, useAdminPlans } from "@/hooks/useAdminData";
 
 const planColors: Record<string, string> = {
   free: "bg-gray-500/15 text-gray-400",
-  starter: "bg-blue-500/15 text-blue-400",
-  professional: "bg-primary/15 text-primary",
+  essential: "bg-blue-500/15 text-blue-400",
+  advanced: "bg-primary/15 text-primary",
   enterprise: "bg-amber-500/15 text-amber-400",
 };
 
 export default function AdminEmpresas() {
   const navigate = useNavigate();
   const { data: companies, isLoading } = useAdminCompanies();
+  const { data: plans } = useAdminPlans();
   const createCompany = useCreateCompany();
   const updateCompany = useUpdateCompany();
+
+  const planLabels = Object.fromEntries((plans || []).map((p) => [p.slug, p.name]));
 
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -132,17 +128,17 @@ export default function AdminEmpresas() {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-muted-foreground">Plano</label>
             <div className="grid grid-cols-4 gap-2">
-              {Object.entries(planLabels).map(([key, label]) => (
+              {(plans || []).map((p) => (
                 <button
-                  key={key}
-                  onClick={() => setNewPlan(key)}
+                  key={p.slug}
+                  onClick={() => setNewPlan(p.slug)}
                   className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
-                    newPlan === key
+                    newPlan === p.slug
                       ? "border-primary bg-primary/5 text-primary"
                       : "hover:bg-secondary text-muted-foreground"
                   }`}
                 >
-                  {label}
+                  {p.name}
                 </button>
               ))}
             </div>

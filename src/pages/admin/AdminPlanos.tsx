@@ -105,14 +105,14 @@ export default function AdminPlanos() {
     setEditedPlan({ ...editedPlan, [key]: value });
   }
 
-  function handleGenerateLink(companyId: string, planId: string) {
-    const planDef = plans?.find((p) => p.id === planId);
+  function handleGenerateLink(companyId: string, planUUID: string) {
+    const planDef = plans?.find((p) => p.id === planUUID);
     if (!planDef) return;
 
     createLink.mutate(
       {
         company_id: companyId,
-        plan: planId,
+        plan: planDef.slug,
         plan_name: planDef.name,
         plan_price: planDef.price_label,
       },

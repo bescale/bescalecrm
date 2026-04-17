@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCompanyPlan } from "@/hooks/usePlanLimits";
 
 interface CompanyData {
   id: string;
@@ -23,6 +24,7 @@ interface CompanyData {
 export default function ConfigEmpresa() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { data: companyPlan } = useCompanyPlan();
 
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -193,12 +195,6 @@ export default function ConfigEmpresa() {
     return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
   }
 
-  const planLabels: Record<string, string> = {
-    free: "Gratuito",
-    starter: "Starter",
-    professional: "Profissional",
-    enterprise: "Empresarial",
-  };
 
   if (loading) {
     return (
@@ -417,7 +413,7 @@ export default function ConfigEmpresa() {
         <h3 className="font-semibold text-sm">Plano atual</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs font-medium px-3 py-1 rounded-full bg-primary/10 text-primary">
-            {planLabels[company.plan] || company.plan}
+            {companyPlan?.name || company.plan}
           </span>
           <span
             className={`text-xs font-medium px-3 py-1 rounded-full ${

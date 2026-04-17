@@ -331,7 +331,17 @@ export function useSubscriptionByToken(token: string | undefined) {
 export function useSignSubscription() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ linkId, companyId, plan }: { linkId: string; companyId: string; plan: string }) => {
+    mutationFn: async ({
+      linkId,
+      companyId,
+      planSlug,
+      planId,
+    }: {
+      linkId: string;
+      companyId: string;
+      planSlug: string;
+      planId: string;
+    }) => {
       // 1. Accept the subscription link
       const { error: linkError } = await supabase
         .from("subscription_links")
@@ -339,10 +349,21 @@ export function useSignSubscription() {
         .eq("id", linkId);
       if (linkError) throw linkError;
 
-      // 2. Update the company's plan and plan_id
+      // 2. Resolve plan UUID from slug if needed
+      let resolvedPlanId = planId;
+      if (!planId) {
+        const { data: planRow } = await supabase
+          .from("plans")
+          .select("id")
+          .eq("slug", planSlug)
+          .single();
+        resolvedPlanId = planRow?.id || planId;
+      }
+
+      // 3. Update the company's plan_id (UUID) and plan (slug for legacy)
       const { error: companyError } = await supabase
         .from("companies")
-        .update({ plan, plan_id: plan })
+        .update({ plan: planSlug, plan_id: resolvedPlanId } as any)
         .eq("id", companyId);
       if (companyError) throw companyError;
     },
@@ -413,10 +434,10 @@ export function useUpdatePlan() {
 export function useUpdateCompanyPlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ companyId, planId }: { companyId: string; planId: string }) => {
+    mutationFn: async ({ companyId, planId, planSlug }: { companyId: string; planId: string; planSlug: string }) => {
       const { error } = await supabase
         .from("companies")
-        .update({ plan: planId, plan_id: planId })
+        .update({ plan: planSlug, plan_id: planId } as any)
         .eq("id", companyId);
       if (error) throw error;
     },
