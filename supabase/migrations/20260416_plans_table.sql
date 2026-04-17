@@ -71,5 +71,5 @@ AS $$
   SELECT row_to_json(p)
   FROM public.plans p
   JOIN public.companies c ON c.plan_id = p.id
-  WHERE c.id = _company_id::text;
+  WHERE c.id = _company_id;
 $$;
