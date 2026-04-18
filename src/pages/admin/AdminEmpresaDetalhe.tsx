@@ -554,10 +554,9 @@ function SessionCard({
   onDelete: () => void;
   saving: boolean;
 }) {
-  const settings = session.settings as { webhook_url?: string; prompt?: string } | null;
   const [editName, setEditName] = useState(session.name);
-  const [editWebhook, setEditWebhook] = useState(settings?.webhook_url || "");
-  const [editPrompt, setEditPrompt] = useState(settings?.prompt || "");
+  const [editWebhook, setEditWebhook] = useState(session.webhook_url || "");
+  const [editPrompt, setEditPrompt] = useState(session.prompt || "");
 
   function handleSave() {
     onSave({
@@ -682,7 +681,7 @@ function SessionCard({
               <span className="font-medium">Webhook</span>
             </div>
             <p className="text-xs font-mono text-muted-foreground/70 truncate">
-              {settings?.webhook_url || "Não configurado"}
+              {session.webhook_url || "Não configurado"}
             </p>
           </div>
           <div className="space-y-1 min-w-0">
@@ -691,7 +690,7 @@ function SessionCard({
               <span className="font-medium">Prompt</span>
             </div>
             <p className="text-xs text-muted-foreground/70 truncate">
-              {settings?.prompt || "Não configurado"}
+              {session.prompt || "Não configurado"}
             </p>
           </div>
         </div>

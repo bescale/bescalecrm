@@ -794,10 +794,12 @@ export type Database = {
           id: string
           name: string
           phone_number: string | null
+          prompt: string | null
           settings: Json | null
           status: string
           updated_at: string
           waha_instance_id: string | null
+          webhook_url: string | null
         }
         Insert: {
           company_id: string
@@ -805,10 +807,12 @@ export type Database = {
           id?: string
           name: string
           phone_number?: string | null
+          prompt?: string | null
           settings?: Json | null
           status?: string
           updated_at?: string
           waha_instance_id?: string | null
+          webhook_url?: string | null
         }
         Update: {
           company_id?: string
@@ -816,10 +820,12 @@ export type Database = {
           id?: string
           name?: string
           phone_number?: string | null
+          prompt?: string | null
           settings?: Json | null
           status?: string
           updated_at?: string
           waha_instance_id?: string | null
+          webhook_url?: string | null
         }
         Relationships: [
           {

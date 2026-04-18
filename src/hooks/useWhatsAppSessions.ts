@@ -99,28 +99,6 @@ export function useSyncSessionStatuses() {
   });
 }
 
-/** Merge a partial object into the session's settings JSONB and update the row directly. */
-async function patchSessionSettings(sessionId: string, patch: Record<string, unknown>) {
-  // Read current settings
-  const { data: row, error: readErr } = await supabase
-    .from("whatsapp_sessions")
-    .select("settings")
-    .eq("id", sessionId)
-    .single();
-
-  if (readErr) throw readErr;
-
-  const prev = (row?.settings as Record<string, unknown>) ?? {};
-  const merged = { ...prev, ...patch };
-
-  const { error: writeErr } = await supabase
-    .from("whatsapp_sessions")
-    .update({ settings: merged as any })
-    .eq("id", sessionId);
-
-  if (writeErr) throw writeErr;
-}
-
 export function useUpdateSessionWebhook() {
   const qc = useQueryClient();
   return useMutation({
@@ -128,19 +106,18 @@ export function useUpdateSessionWebhook() {
       // 1. Read current row to check if webhook already exists
       const { data: row, error: readErr } = await supabase
         .from("whatsapp_sessions")
-        .select("settings, waha_instance_id")
+        .select("webhook_url, waha_instance_id")
         .eq("id", sessionId)
         .single();
 
       if (readErr) throw readErr;
 
-      const prev = (row?.settings as Record<string, unknown>) ?? {};
-      const alreadyHasWebhook = !!prev.webhook_url;
+      const alreadyHasWebhook = !!(row as any)?.webhook_url;
 
-      // 2. Save in DB (merge settings)
+      // 2. Save in dedicated column
       const { error: writeErr } = await supabase
         .from("whatsapp_sessions")
-        .update({ settings: { ...prev, webhook_url: webhookUrl } as any })
+        .update({ webhook_url: webhookUrl } as any)
         .eq("id", sessionId);
 
       if (writeErr) throw writeErr;
@@ -171,8 +148,13 @@ export function useUpdateSessionWebhook() {
 export function useUpdateSessionPrompt() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ sessionId, prompt }: { sessionId: string; prompt: string }) =>
-      patchSessionSettings(sessionId, { prompt }),
+    mutationFn: async ({ sessionId, prompt }: { sessionId: string; prompt: string }) => {
+      const { error } = await supabase
+        .from("whatsapp_sessions")
+        .update({ prompt } as any)
+        .eq("id", sessionId);
+      if (error) throw error;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsapp-sessions"] }),
   });
 }

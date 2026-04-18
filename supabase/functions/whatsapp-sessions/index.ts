@@ -104,18 +104,28 @@ serve(async (req: Request) => {
         const secret = Deno.env.get("WEBHOOK_SECRET")!;
         const hookUrl = `${supaUrl}/functions/v1/whatsapp-webhook?secret=${secret}`;
 
+        const wahaConfig: Record<string, unknown> = {
+          webhooks: [{
+            url: hookUrl,
+            events: ["message", "message.any", "message.ack", "session.status"],
+            retries: { delaySeconds: 2, attempts: 15, policy: "constant" },
+          }],
+          // Desativar chats de status, grupos, canais e broadcast
+          ignore: {
+            status: true,
+            groups: true,
+            channels: true,
+            broadcast: true,
+            ...(body.config?.ignore || {}),
+          },
+        };
+
         await wahaJson("/api/sessions", {
           method: "POST",
           body: JSON.stringify({
             name: wahaId,
             start: true,
-            config: {
-              webhooks: [{
-                url: hookUrl,
-                events: ["message", "message.any", "message.ack", "session.status"],
-                retries: { delaySeconds: 2, attempts: 15, policy: "constant" },
-              }],
-            },
+            config: wahaConfig,
           }),
         });
 
@@ -156,13 +166,12 @@ serve(async (req: Request) => {
         if (!webhookUrl) throw new Error("webhook_url is required");
 
         const session = await getSession(db, sessionId, companyId);
-        const prev = (session.settings as Record<string, unknown>) || {};
-        const alreadyHasWebhook = !!prev.webhook_url;
+        const alreadyHasWebhook = !!(session as Record<string, unknown>).webhook_url;
 
-        // 1. Save in DB
+        // 1. Save in dedicated column
         await db
           .from("whatsapp_sessions")
-          .update({ settings: { ...prev, webhook_url: webhookUrl } })
+          .update({ webhook_url: webhookUrl })
           .eq("id", sessionId);
 
         // 2. Notify Bescale with edit flag (non-blocking)
@@ -185,14 +194,12 @@ serve(async (req: Request) => {
         return json({ ok: true });
       }
 
-      /* update-prompt — fixed prompt stored in session settings */
+      /* update-prompt — saved in dedicated column */
       if (action === "update-prompt" && sessionId) {
         const prompt: string = body.prompt ?? "";
-        const session = await getSession(db, sessionId, companyId);
-        const prev = (session.settings as Record<string, unknown>) || {};
         await db
           .from("whatsapp_sessions")
-          .update({ settings: { ...prev, prompt } })
+          .update({ prompt })
           .eq("id", sessionId);
         return json({ ok: true });
       }

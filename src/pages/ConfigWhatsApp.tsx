@@ -197,9 +197,8 @@ function SessionCard({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const settings = s.settings as { webhook_url?: string; prompt?: string } | null;
-  const savedWebhookUrl = settings?.webhook_url || "";
-  const savedPrompt = settings?.prompt || "";
+  const savedWebhookUrl = s.webhook_url || "";
+  const savedPrompt = s.prompt || "";
 
   return (
     <>

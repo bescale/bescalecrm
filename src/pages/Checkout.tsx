@@ -81,7 +81,7 @@ function formatExpiry(value: string) {
 export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, user, profile, loading } = useAuth();
+  const { session, user, profile, loading, refreshProfile } = useAuth();
   const { toast } = useToast();
 
   const selectedPlan = (location.state as { selectedPlan?: string })?.selectedPlan;
@@ -122,6 +122,7 @@ export default function Checkout() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<"success" | "error" | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (loading || planLoading) return null;
   if (!session) return <Navigate to="/login" replace />;
@@ -210,23 +211,85 @@ export default function Checkout() {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const raw = await response.json();
+      console.log("[checkout] webhook response:", raw);
+      // O webhook pode retornar array direto, objeto, ou { data: [...] }
+      const unwrapped = Array.isArray(raw) ? raw[0] : (raw?.data ? (Array.isArray(raw.data) ? raw.data[0] : raw.data) : raw);
+      const data: Record<string, any> = unwrapped ?? {};
 
-      if (data.success === true || data.sucesso === true) {
+      // Normaliza as chaves (case-insensitive, ignora espaços) pra não
+      // depender de variações exatas do webhook ("cliente id", "Cliente_Id", etc.)
+      const normalized: Record<string, any> = {};
+      for (const [k, v] of Object.entries(data)) {
+        normalized[k.toLowerCase().replace(/[\s_-]+/g, "")] = v;
+      }
+
+      const customerId: string | undefined =
+        normalized["clienteid"] ?? normalized["customerid"];
+      const subscriptionId: string | undefined =
+        normalized["assinaturaid"] ?? normalized["subscriptionid"];
+
+      // Aprovado aceita: true, "true", "TRUE", 1, "1", "sim", "yes", "aprovado"
+      const approvedRaw = normalized["aprovado"] ?? normalized["approved"];
+      const approvedStr = String(approvedRaw ?? "").trim().toLowerCase();
+      const isApproved =
+        approvedRaw === true ||
+        approvedRaw === 1 ||
+        ["true", "1", "sim", "yes", "aprovado", "approved"].includes(approvedStr);
+
+      if (isApproved) {
+        // Cria/atualiza a empresa + vincula plano e IDs da Asaas num único RPC.
+        // Funciona tanto para usuário novo (sem company_id) quanto para
+        // usuário existente trocando/renovando plano.
+        const { error: rpcError } = await supabase.rpc("activate_subscription" as any, {
+          _plan_id: selectedPlan,
+          _company_name: billing.name,
+          _cnpj: personType === "pj" ? billing.document.replace(/\D/g, "") : null,
+          _customer_id: customerId ?? null,
+          _subscription_id: subscriptionId ?? null,
+        });
+
+        if (rpcError) {
+          console.error("[checkout] RPC activate_subscription failed:", rpcError);
+          setResult("error");
+          setErrorMsg(`Pagamento aprovado, mas falhou ao ativar a conta: ${rpcError.message}`);
+          toast({
+            title: "Pagamento aprovado, mas falhou ao ativar a conta",
+            description: rpcError.message,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Sincroniza o AuthContext com o novo company_id antes de redirecionar,
+        // senão o ProtectedRoute devolve o usuário pra /planos.
+        await refreshProfile();
+
         setResult("success");
+        setErrorMsg(null);
         setTimeout(() => {
-          navigate("/onboarding", { state: { selectedPlan } });
+          navigate("/", { replace: true });
         }, 2000);
       } else {
+        const reason =
+          normalized["retorno"] ||
+          normalized["mensagem"] ||
+          normalized["message"] ||
+          "Verifique os dados do cartão e tente novamente.";
         setResult("error");
+        setErrorMsg(`Pagamento não aprovado. ${reason}`);
         toast({
           title: "Pagamento não aprovado",
-          description: data.message || "Verifique os dados do cartão e tente novamente.",
+          description: reason,
           variant: "destructive",
         });
       }
-    } catch {
+    } catch (err) {
+      console.error("[checkout] unexpected error:", err);
       setResult("error");
+      setErrorMsg(
+        `Erro ao processar o pagamento: ${err instanceof Error ? err.message : String(err)}`
+      );
       toast({
         title: "Erro de conexão",
         description: "Não foi possível processar o pagamento. Tente novamente.",
@@ -541,12 +604,10 @@ export default function Checkout() {
           </div>
 
           {/* Error message */}
-          {result === "error" && (
+          {result === "error" && errorMsg && (
             <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
               <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-              <p className="text-sm text-red-500">
-                Pagamento não aprovado. Verifique os dados e tente novamente.
-              </p>
+              <p className="text-sm text-red-500">{errorMsg}</p>
             </div>
           )}
 

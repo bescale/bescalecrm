@@ -233,7 +233,7 @@ export default function MessageArea({ conversation, onFileDrop, onReply, onReact
   // ── messages list ─────────────────────────────────────────────────────────
 
   const messagesList = (
-    <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4 bg-secondary/30">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-6 space-y-4 bg-secondary/30 scrollbar-none">
       {isLoading && (
         <div className="flex justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
