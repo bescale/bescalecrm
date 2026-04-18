@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(npm run:*)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_383475b127de5d6944104537692e1c1026f21c1f npx supabase:*)",
+      "Bash(git:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh auth:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)"
+    ]
+  }
+}
