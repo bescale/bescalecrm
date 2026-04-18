@@ -81,7 +81,7 @@ function formatExpiry(value: string) {
 export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, user, profile, loading } = useAuth();
+  const { session, user, profile, loading, refreshProfile } = useAuth();
   const { toast } = useToast();
 
   const selectedPlan = (location.state as { selectedPlan?: string })?.selectedPlan;
@@ -211,41 +211,51 @@ export default function Checkout() {
       });
 
       const raw = await response.json();
-      // O webhook retorna array — pega o primeiro item
-      const data = Array.isArray(raw) ? raw[0] : raw;
+      // O webhook pode retornar array direto, objeto, ou { data: [...] }
+      const unwrapped = Array.isArray(raw) ? raw[0] : (raw?.data ? (Array.isArray(raw.data) ? raw.data[0] : raw.data) : raw);
+      const data = unwrapped ?? {};
 
       // "cliente id" vem com espaço no JSON do webhook
-      const customerId: string | undefined = data["cliente id"] ?? data.cliente_id;
-      const subscriptionId: string | undefined = data.assinatura_id;
+      const customerId: string | undefined = data["cliente id"] ?? data.cliente_id ?? data.customer_id;
+      const subscriptionId: string | undefined = data.assinatura_id ?? data.subscription_id;
 
-      if (data.Aprovado === true) {
-        // Ativar plano + salvar IDs de pagamento no Supabase
-        if (profile?.company_id && planData) {
-          await supabase
-            .from("companies")
-            .update({
-              plan: planData.slug,
-              plan_id: planData.id,
-              customer_id: customerId,
-              subscription_id: subscriptionId,
-            } as any)
-            .eq("id", profile.company_id);
+      // Aprovado pode vir como boolean true ou string "true" (case-insensitive)
+      const approvedRaw = data.Aprovado ?? data.aprovado ?? data.approved;
+      const isApproved =
+        approvedRaw === true ||
+        String(approvedRaw ?? "").trim().toLowerCase() === "true";
+
+      if (isApproved) {
+        // Cria/atualiza a empresa + vincula plano e IDs da Asaas num único RPC.
+        // Funciona tanto para usuário novo (sem company_id) quanto para
+        // usuário existente trocando/renovando plano.
+        const { error: rpcError } = await supabase.rpc("activate_subscription" as any, {
+          _plan_id: selectedPlan,
+          _company_name: billing.name,
+          _cnpj: personType === "pj" ? billing.document.replace(/\D/g, "") : null,
+          _customer_id: customerId ?? null,
+          _subscription_id: subscriptionId ?? null,
+        });
+
+        if (rpcError) {
+          setResult("error");
+          toast({
+            title: "Pagamento aprovado, mas falhou ao ativar a conta",
+            description: rpcError.message,
+            variant: "destructive",
+          });
+          return;
         }
+
+        // Sincroniza o AuthContext com o novo company_id antes de redirecionar,
+        // senão o ProtectedRoute devolve o usuário pra /planos.
+        await refreshProfile();
 
         setResult("success");
         setTimeout(() => {
-          navigate("/onboarding", { state: { selectedPlan } });
+          navigate("/", { replace: true });
         }, 2000);
       } else {
-        // Pagamento recusado — ainda registra customer_id se vier,
-        // pois o cliente pode ter sido criado na Asaas mesmo com falha
-        if (profile?.company_id && customerId) {
-          await supabase
-            .from("companies")
-            .update({ customer_id: customerId } as any)
-            .eq("id", profile.company_id);
-        }
-
         setResult("error");
         toast({
           title: "Pagamento não aprovado",
