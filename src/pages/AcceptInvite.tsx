@@ -7,7 +7,14 @@ import { toast } from "sonner";
 
 export default function AcceptInvite() {
   const navigate = useNavigate();
-  const { session, user, profile, loading, refreshProfile } = useAuth();
+  const {
+    session,
+    user,
+    loading,
+    mustSetPassword,
+    refreshProfile,
+    clearMustSetPassword,
+  } = useAuth();
 
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -22,12 +29,18 @@ export default function AcceptInvite() {
     }
   }, [loading, session, navigate]);
 
-  // Already completed profile → go to dashboard
+  // Pre-fill name from invite metadata (vindo do user_metadata.full_name)
   useEffect(() => {
-    if (profile?.full_name && profile.full_name.trim() !== "") {
+    const invitedName = (user?.user_metadata?.full_name as string) || "";
+    if (invitedName && !fullName) setFullName(invitedName);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Usuário já definiu senha anteriormente → vai pro dashboard
+  useEffect(() => {
+    if (!loading && session && !mustSetPassword) {
       navigate("/", { replace: true });
     }
-  }, [profile, navigate]);
+  }, [loading, session, mustSetPassword, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,10 +60,10 @@ export default function AcceptInvite() {
 
     setSubmitting(true);
     try {
-      // Set password + update metadata
+      // Set password + update metadata (remove must_set_password)
       const { error: authError } = await supabase.auth.updateUser({
         password,
-        data: { full_name: fullName.trim() },
+        data: { full_name: fullName.trim(), must_set_password: false },
       });
       if (authError) throw authError;
 
@@ -63,6 +76,7 @@ export default function AcceptInvite() {
         if (profileError) throw profileError;
       }
 
+      clearMustSetPassword();
       await refreshProfile();
       toast.success("Bem-vindo à equipe!");
       navigate("/", { replace: true });
@@ -101,8 +115,22 @@ export default function AcceptInvite() {
             Bem-vindo à equipe!
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Complete seu perfil para começar a usar o Bescale
+            Seu convite foi aceito. <strong className="text-foreground">Crie uma senha</strong> para acessar o painel.
           </p>
+        </div>
+
+        {/* Banner informativo sobre senha */}
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+          <Lock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">
+              Defina sua senha de acesso
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Você entrou pelo link de convite. Para usar a dashboard no dia a dia,
+              crie uma senha segura — ela será usada nos próximos logins.
+            </p>
+          </div>
         </div>
 
         <form

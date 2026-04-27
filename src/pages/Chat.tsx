@@ -27,15 +27,27 @@ export default function Chat() {
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
+  const { data: conversations, isLoading, isError, error, refetch } = useConversations();
+
   useEffect(() => {
     const convId = searchParams.get("conversation");
     if (convId && convId !== selectedId) {
       setSelectedId(convId);
       setSearchParams({}, { replace: true });
+      return;
     }
-  }, [searchParams, selectedId, setSearchParams]);
 
-  const { data: conversations, isLoading, isError, error, refetch } = useConversations();
+    const contactId = searchParams.get("contact");
+    if (contactId && conversations) {
+      const match = conversations.find((c) => c.contacts?.id === contactId);
+      if (match) {
+        if (match.id !== selectedId) setSelectedId(match.id);
+      } else {
+        toast.error("Nenhuma conversa encontrada para este lead");
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, selectedId, setSearchParams, conversations]);
   const { data: sessions } = useWhatsAppSessions();
   useRealtimeConversations();
 

@@ -31,9 +31,20 @@ serve(async (req: Request) => {
 
   try {
     /* ─── 1. ENV ──────────────────────────────────────── */
-    const url = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const url = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    const missing: string[] = [];
+    if (!url) missing.push("SUPABASE_URL");
+    if (!anonKey) missing.push("SUPABASE_ANON_KEY");
+    if (!serviceKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+    if (missing.length) {
+      return fail(
+        `Configuração do servidor incompleta. Variáveis ausentes: ${missing.join(", ")}`,
+        500,
+      );
+    }
 
     /* ─── 2. AUTH — validate caller JWT ───────────────── */
     const jwt =
@@ -43,7 +54,7 @@ serve(async (req: Request) => {
 
     if (!jwt) return fail("Token ausente", 401);
 
-    const userClient = createClient(url, anonKey, {
+    const userClient = createClient(url!, anonKey!, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
 
@@ -54,7 +65,7 @@ serve(async (req: Request) => {
 
     if (authErr || !caller) {
       console.error("auth error:", authErr?.message);
-      return fail("Token inválido ou expirado", 401);
+      return fail(`Token inválido ou expirado: ${authErr?.message ?? "unknown"}`, 401);
     }
 
     /* ─── 3. CALLER PROFILE (company_id) ──────────────── */
@@ -84,7 +95,7 @@ serve(async (req: Request) => {
       return fail("Cargo inválido (use agent ou viewer)");
 
     /* ─── 5. ADMIN CLIENT (bypasses RLS) ──────────────── */
-    const admin = createClient(url, serviceKey);
+    const admin = createClient(url!, serviceKey!);
 
     /* ─── 6. COMPANY INFO ─────────────────────────────── */
     const { data: company } = await admin
@@ -96,16 +107,15 @@ serve(async (req: Request) => {
     if (!company) return fail("Empresa não encontrada");
 
     /* ─── 7. CHECK IF EMAIL ALREADY EXISTS ────────────── */
-    //    GoTrue REST API — server-side filter, fast
     let existingUser: { id: string; email: string } | null = null;
 
     try {
       const listRes = await fetch(
-        `${url}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&per_page=50`,
+        `${url}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&per_page=200`,
         {
           headers: {
             Authorization: `Bearer ${serviceKey}`,
-            apikey: serviceKey,
+            apikey: serviceKey!,
           },
         },
       );
@@ -116,10 +126,15 @@ serve(async (req: Request) => {
             (u: { email?: string }) =>
               u.email?.toLowerCase() === email,
           ) ?? null;
+      } else {
+        console.warn(
+          "listUsers returned non-OK:",
+          listRes.status,
+          await listRes.text().catch(() => "<no body>"),
+        );
       }
     } catch (e) {
       console.error("listUsers fetch error:", e);
-      // Continue — will try inviteUserByEmail which will also tell us
     }
 
     /* ─── 8A. EXISTING USER → add to team directly ───── */
@@ -137,7 +152,6 @@ serve(async (req: Request) => {
         return fail("Este usuário já pertence a outra empresa");
       }
 
-      // Assign company
       if (profile) {
         const { error: e } = await admin
           .from("profiles")
@@ -145,14 +159,12 @@ serve(async (req: Request) => {
           .eq("id", existingUser.id);
         if (e) return fail("Erro ao vincular à empresa: " + e.message);
       } else {
-        // Profile missing (trigger may have failed) — create it
         const { error: e } = await admin
           .from("profiles")
           .insert({ id: existingUser.id, full_name: name, company_id: companyId });
         if (e) return fail("Erro ao criar perfil: " + e.message);
       }
 
-      // Assign role (delete old → insert new)
       await admin.from("user_roles").delete().eq("user_id", existingUser.id);
       const { error: roleErr } = await admin
         .from("user_roles")
@@ -176,11 +188,11 @@ serve(async (req: Request) => {
           full_name: name,
           invite_company_id: companyId,
           invite_role: role,
+          must_set_password: true,
         },
         redirectTo,
       });
 
-    // If inviteUserByEmail fails, try generateLink as fallback
     if (inviteErr) {
       console.error("inviteUserByEmail failed:", inviteErr.message);
 
@@ -193,6 +205,7 @@ serve(async (req: Request) => {
               full_name: name,
               invite_company_id: companyId,
               invite_role: role,
+              must_set_password: true,
             },
             redirectTo,
           },
@@ -200,16 +213,22 @@ serve(async (req: Request) => {
 
       if (linkErr || !linkData?.user) {
         console.error("generateLink also failed:", linkErr?.message);
-        return fail("Erro ao criar convite: " + (inviteErr.message || "erro desconhecido"));
+        const detail = [inviteErr.message, linkErr?.message]
+          .filter(Boolean)
+          .join(" | ");
+        return fail(
+          `Erro ao criar convite: ${detail || "erro desconhecido"}. ` +
+            `Verifique (1) SMTP em Authentication → Email, ` +
+            `(2) URL "${redirectTo}" em Redirect URLs, ` +
+            `(3) rate limit de convites.`,
+        );
       }
 
-      // generateLink succeeded — user created, assign company + role
       const userId = linkData.user.id;
       await admin.from("profiles").update({ company_id: companyId }).eq("id", userId);
       await admin.from("user_roles").delete().eq("user_id", userId);
       await admin.from("user_roles").insert({ user_id: userId, role });
 
-      // Return the link so admin can share manually
       const inviteLink = linkData.properties?.action_link || "";
       return ok({
         ok: true,
@@ -219,7 +238,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // inviteUserByEmail succeeded — assign company + role
     const newUserId = invited.user?.id;
     if (newUserId) {
       await admin

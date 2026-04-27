@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -10,10 +10,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   useUpdateSessionWebhook,
   useUpdateSessionPrompt,
+  useUpdateSessionFollowup,
+  type FollowupKey,
 } from "@/hooks/useWhatsAppSessions";
+
+export const FOLLOWUP_OPTIONS: { key: FollowupKey; label: string; description: string }[] = [
+  { key: "followup_2h", label: "2 horas", description: "Enviar follow-up apos 2 horas sem resposta" },
+  { key: "followup_1d", label: "1 dia", description: "Enviar follow-up apos 1 dia sem resposta" },
+  { key: "followup_2d", label: "2 dias", description: "Enviar follow-up apos 2 dias sem resposta" },
+  { key: "followup_3d", label: "3 dias", description: "Enviar follow-up apos 3 dias sem resposta" },
+];
 
 interface SessionSettingsDialogProps {
   open: boolean;
@@ -22,7 +32,15 @@ interface SessionSettingsDialogProps {
   sessionName: string;
   initialWebhookUrl: string;
   initialPrompt: string;
+  initialFollowups?: Partial<Record<FollowupKey, boolean>>;
 }
+
+const DEFAULT_FOLLOWUPS: Record<FollowupKey, boolean> = {
+  followup_2h: false,
+  followup_1d: false,
+  followup_2d: false,
+  followup_3d: false,
+};
 
 export default function SessionSettingsDialog({
   open,
@@ -31,9 +49,16 @@ export default function SessionSettingsDialog({
   sessionName,
   initialWebhookUrl,
   initialPrompt,
+  initialFollowups,
 }: SessionSettingsDialogProps) {
+  const followupsState: Record<FollowupKey, boolean> = {
+    ...DEFAULT_FOLLOWUPS,
+    ...(initialFollowups ?? {}),
+  };
+
   const updateWebhook = useUpdateSessionWebhook();
   const updatePrompt = useUpdateSessionPrompt();
+  const updateFollowup = useUpdateSessionFollowup();
 
   const [webhookUrl, setWebhookUrl] = useState(initialWebhookUrl);
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -45,6 +70,15 @@ export default function SessionSettingsDialog({
       setPrompt(initialPrompt);
     }
   }, [open, initialWebhookUrl, initialPrompt]);
+
+  const handleFollowupToggle = (key: FollowupKey, value: boolean) => {
+    updateFollowup.mutate(
+      { sessionId, key, value },
+      {
+        onError: (err) => toast.error("Erro: " + (err as Error).message),
+      }
+    );
+  };
 
   const isSaving = updateWebhook.isPending || updatePrompt.isPending;
 
@@ -88,11 +122,42 @@ export default function SessionSettingsDialog({
         <DialogHeader>
           <DialogTitle>Configuracoes — {sessionName}</DialogTitle>
           <DialogDescription>
-            Configure o webhook adicional e o prompt fixo desta instancia.
+            Configure o webhook adicional, o prompt fixo e os follow-ups desta instancia.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {/* Follow-ups (primeiro para garantir visibilidade) */}
+          <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              <label className="text-sm font-semibold">Follow-up automatico</label>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Ative os intervalos de follow-up desejados para esta instancia. As alteracoes sao salvas automaticamente.
+            </p>
+            <div className="rounded-lg border bg-background divide-y">
+              {FOLLOWUP_OPTIONS.map(({ key, label, description }) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-3 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {description}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={!!followupsState[key]}
+                    disabled={updateFollowup.isPending}
+                    onCheckedChange={(v) => handleFollowupToggle(key, v)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Webhook URL */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Webhook URL adicional</label>
@@ -114,7 +179,7 @@ export default function SessionSettingsDialog({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Ex: Voce e um assistente de vendas da empresa X. Sempre responda de forma educada e objetiva..."
-              rows={8}
+              rows={6}
               className="resize-y font-mono text-xs leading-relaxed"
             />
             <p className="text-[11px] text-muted-foreground">

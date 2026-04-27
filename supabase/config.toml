@@ -1,1 +1,8 @@
 project_id = "xhfpjtswcsotfdssgxsh"
+
+# Edge Functions
+# invite-member faz validação própria do JWT via userClient.auth.getUser().
+# Desativamos verify_jwt no gateway porque o projeto usa chaves JWT assimétricas
+# (ES256/RS256) e o gateway retorna UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM.
+[functions.invite-member]
+verify_jwt = false

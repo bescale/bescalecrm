@@ -7,11 +7,14 @@ import {
   ChevronRight,
   Power,
   PowerOff,
-  Users,
-  Smartphone,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAdminCompanies, useCreateCompany, useUpdateCompany, useAdminPlans } from "@/hooks/useAdminData";
+import {
+  useAdminCompanies,
+  useUpdateCompany,
+  useAdminPlans,
+} from "@/hooks/useAdminData";
+import CreateCompanyDialog from "@/components/admin/CreateCompanyDialog";
 
 const planColors: Record<string, string> = {
   free: "bg-gray-500/15 text-gray-400",
@@ -24,16 +27,12 @@ export default function AdminEmpresas() {
   const navigate = useNavigate();
   const { data: companies, isLoading } = useAdminCompanies();
   const { data: plans } = useAdminPlans();
-  const createCompany = useCreateCompany();
   const updateCompany = useUpdateCompany();
 
   const planLabels = Object.fromEntries((plans || []).map((p) => [p.slug, p.name]));
 
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newCnpj, setNewCnpj] = useState("");
-  const [newPlan, setNewPlan] = useState("free");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const filtered = companies?.filter(
     (c) =>
@@ -41,21 +40,6 @@ export default function AdminEmpresas() {
       c.cnpj?.includes(search) ||
       c.plan.toLowerCase().includes(search.toLowerCase())
   );
-
-  function handleCreate() {
-    if (!newName.trim()) return;
-    createCompany.mutate(
-      { name: newName.trim(), cnpj: newCnpj.trim() || undefined, plan: newPlan },
-      {
-        onSuccess: () => {
-          setShowCreate(false);
-          setNewName("");
-          setNewCnpj("");
-          setNewPlan("free");
-        },
-      }
-    );
-  }
 
   function toggleActive(company: (typeof companies)[0]) {
     if (!confirm(`Deseja ${company.is_active ? "desativar" : "ativar"} a empresa "${company.name}"?`))
@@ -82,7 +66,7 @@ export default function AdminEmpresas() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => setCreateOpen(true)}
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -101,70 +85,8 @@ export default function AdminEmpresas() {
         />
       </div>
 
-      {/* Create form */}
-      {showCreate && (
-        <div className="rounded-xl border bg-card p-5 space-y-4 max-w-2xl">
-          <h3 className="font-semibold text-sm">Nova empresa</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Nome *</label>
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Nome da empresa"
-                className="w-full rounded-lg border bg-secondary/50 py-2.5 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">CNPJ</label>
-              <input
-                value={newCnpj}
-                onChange={(e) => setNewCnpj(e.target.value)}
-                placeholder="00.000.000/0000-00"
-                className="w-full rounded-lg border bg-secondary/50 py-2.5 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-muted-foreground">Plano</label>
-            <div className="grid grid-cols-4 gap-2">
-              {(plans || []).map((p) => (
-                <button
-                  key={p.slug}
-                  onClick={() => setNewPlan(p.slug)}
-                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
-                    newPlan === p.slug
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "hover:bg-secondary text-muted-foreground"
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleCreate}
-              disabled={createCompany.isPending}
-              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              {createCompany.isPending ? "Criando..." : "Criar empresa"}
-            </button>
-            <button
-              onClick={() => {
-                setShowCreate(false);
-                setNewName("");
-                setNewCnpj("");
-                setNewPlan("free");
-              }}
-              className="rounded-lg border px-4 py-2.5 text-sm hover:bg-secondary transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Create dialog */}
+      <CreateCompanyDialog open={createOpen} onOpenChange={setCreateOpen} />
 
       {/* Companies grid */}
       {filtered?.length === 0 ? (

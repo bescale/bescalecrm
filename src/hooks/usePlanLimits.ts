@@ -61,10 +61,12 @@ export function usePlanLimits() {
 
   async function countUsers(): Promise<number> {
     if (!companyId) return 0;
+    // Só contabiliza membros ativos da empresa do caller.
     const { count } = await supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
-      .eq("company_id", companyId);
+      .eq("company_id", companyId)
+      .eq("is_active", true);
     return count || 0;
   }
 

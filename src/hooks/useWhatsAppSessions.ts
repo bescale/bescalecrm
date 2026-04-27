@@ -158,3 +158,56 @@ export function useUpdateSessionPrompt() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["whatsapp-sessions"] }),
   });
 }
+
+export type FollowupKey = "followup_2h" | "followup_1d" | "followup_2d" | "followup_3d";
+
+export function useUpdateSessionFollowup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      key,
+      value,
+    }: {
+      sessionId: string;
+      key: FollowupKey;
+      value: boolean;
+    }) => {
+      const { error } = await supabase
+        .from("whatsapp_sessions")
+        .update({ [key]: value } as any)
+        .eq("id", sessionId);
+      if (error) throw error;
+    },
+    onMutate: async ({ sessionId, key, value }) => {
+      // Cancel refetches to avoid overwriting optimistic update
+      await qc.cancelQueries({ queryKey: ["whatsapp-sessions"] });
+      await qc.cancelQueries({ queryKey: ["admin-company-sessions"] });
+
+      // Snapshot previous state
+      const previousSessions = qc.getQueryData<WhatsAppSession[]>(["whatsapp-sessions"]);
+
+      // Optimistic update for regular sessions view
+      qc.setQueryData<WhatsAppSession[]>(["whatsapp-sessions"], (old) =>
+        old?.map((s) => (s.id === sessionId ? { ...s, [key]: value } : s))
+      );
+
+      // Optimistic update for ALL admin-company-sessions queries (any companyId)
+      qc.setQueriesData<WhatsAppSession[]>(
+        { queryKey: ["admin-company-sessions"] },
+        (old) => old?.map((s) => (s.id === sessionId ? { ...s, [key]: value } : s))
+      );
+
+      return { previousSessions };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousSessions) qc.setQueryData(["whatsapp-sessions"], ctx.previousSessions);
+      // Refetch admin sessions to restore correct state
+      qc.invalidateQueries({ queryKey: ["admin-company-sessions"] });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["whatsapp-sessions"] });
+      qc.invalidateQueries({ queryKey: ["admin-company-sessions"] });
+    },
+  });
+}

@@ -2,7 +2,8 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function ProtectedRoute() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, mustSetPassword, pendingPasswordReset } =
+    useAuth();
 
   if (loading) {
     return (
@@ -17,6 +18,16 @@ export default function ProtectedRoute() {
 
   if (!session) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Fluxo de recuperação de senha — bloqueia dashboard até redefinir
+  if (pendingPasswordReset) {
+    return <Navigate to="/reset-password" replace />;
+  }
+
+  // Fluxo de convite — usuário precisa criar senha antes de entrar
+  if (mustSetPassword) {
+    return <Navigate to="/accept-invite" replace />;
   }
 
   // If user has no company, redirect to plan selection first

@@ -1,47 +1,88 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Lock, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { session, pendingPasswordReset, clearPendingPasswordReset, signOut } =
+    useAuth();
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Check for recovery token in URL hash
+    // Aceita 3 situações: hash contendo type=recovery, evento PASSWORD_RECOVERY
+    // ou sessão ativa marcada como pendente de reset (persiste entre F5)
     const hash = window.location.hash;
     if (hash && hash.includes("type=recovery")) {
       setReady(true);
-    } else {
-      // Listen for PASSWORD_RECOVERY event
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      return;
+    }
+    if (pendingPasswordReset) {
+      setReady(true);
+      return;
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event) => {
         if (event === "PASSWORD_RECOVERY") {
           setReady(true);
         }
-      });
-      return () => subscription.unsubscribe();
+      },
+    );
+    return () => subscription.unsubscribe();
+  }, [pendingPasswordReset]);
+
+  // Sem sessão e sem hash de recovery → volta pro login
+  useEffect(() => {
+    if (!session && !window.location.hash.includes("type=recovery")) {
+      navigate("/login", { replace: true });
     }
-  }, []);
+  }, [session, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
-      toast({ title: "Senha muito curta", description: "Mínimo 6 caracteres.", variant: "destructive" });
+      toast({
+        title: "Senha muito curta",
+        description: "Mínimo 6 caracteres.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast({
+        title: "Senhas não coincidem",
+        description: "Digite a mesma senha nos dois campos.",
+        variant: "destructive",
+      });
       return;
     }
     setSubmitting(true);
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Senha atualizada!", description: "Você já pode usar sua nova senha." });
-      navigate("/login");
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+      setSubmitting(false);
+      return;
     }
+
+    // Limpa flag e desloga — usuário precisa entrar com a nova senha
+    clearPendingPasswordReset();
+    await signOut();
+    toast({
+      title: "Senha atualizada!",
+      description: "Faça login com sua nova senha.",
+    });
+    navigate("/login", { replace: true });
     setSubmitting(false);
   };
 
@@ -62,8 +103,10 @@ export default function ResetPassword() {
             alt="Bescale"
             className="mx-auto h-14 w-auto object-contain"
           />
-          <h1 className="mt-4 text-2xl font-bold">Nova senha</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Digite sua nova senha abaixo</p>
+          <h1 className="mt-4 text-2xl font-bold">Definir nova senha</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Digite e confirme sua nova senha para continuar
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -86,6 +129,21 @@ export default function ResetPassword() {
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Confirmar senha</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repita a senha"
+                className="w-full rounded-lg border bg-card py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              />
             </div>
           </div>
 

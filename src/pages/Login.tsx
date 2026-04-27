@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Mail, Lock, LogIn, Eye, EyeOff } from "lucide-react";
@@ -40,7 +40,7 @@ export default function Login() {
         <div className="absolute bottom-0 right-1/4 h-[300px] w-[300px] rounded-full bg-primary/5 blur-[100px]" />
       </div>
 
-      <div className="relative w-full max-w-md space-y-8">
+      <div className="relative w-full max-w-lg space-y-8">
         {/* Logo */}
         <div className="text-center">
           <img
@@ -54,7 +54,7 @@ export default function Login() {
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4 rounded-xl border border-border bg-card p-6">
+        <form onSubmit={handleLogin} className="space-y-5 rounded-xl border border-border bg-card p-8">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground/80">E-mail</label>
             <div className="relative">
@@ -71,12 +71,7 @@ export default function Login() {
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-foreground/80">Senha</label>
-              <Link to="/forgot-password" className="text-xs text-primary hover:text-primary/80 transition-colors">
-                Esqueceu a senha?
-              </Link>
-            </div>
+            <label className="text-sm font-medium text-foreground/80">Senha</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
@@ -95,6 +90,11 @@ export default function Login() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <div className="flex justify-end">
+              <a href="/forgot-password" className="text-xs text-primary hover:text-primary/80 transition-colors">
+                Esqueceu a senha?
+              </a>
+            </div>
           </div>
 
           <button
@@ -111,12 +111,6 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Ainda não tem conta?{" "}
-          <Link to="/signup" className="font-medium text-primary hover:text-primary/80 transition-colors">
-            Criar conta
-          </Link>
-        </p>
       </div>
     </div>
   );

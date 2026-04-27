@@ -13,6 +13,9 @@ import {
   Link,
   Settings,
   MessageSquareText,
+  Clock,
+  Check,
+  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -23,8 +26,13 @@ import {
   useSessionQr,
   useRealtimeWhatsAppSessions,
   useSyncSessionStatuses,
+  useUpdateSessionFollowup,
+  type FollowupKey,
 } from "@/hooks/useWhatsAppSessions";
-import SessionSettingsDialog from "@/components/whatsapp/SessionSettingsDialog";
+import SessionSettingsDialog, {
+  FOLLOWUP_OPTIONS,
+} from "@/components/whatsapp/SessionSettingsDialog";
+import { Switch } from "@/components/ui/switch";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { AlertTriangle } from "lucide-react";
 
@@ -196,9 +204,26 @@ function SessionCard({
   onAction: (action: "start" | "stop" | "delete") => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const updateFollowup = useUpdateSessionFollowup();
 
   const savedWebhookUrl = s.webhook_url || "";
   const savedPrompt = s.prompt || "";
+
+  const followups: Record<FollowupKey, boolean> = {
+    followup_2h: !!(s as any).followup_2h,
+    followup_1d: !!(s as any).followup_1d,
+    followup_2d: !!(s as any).followup_2d,
+    followup_3d: !!(s as any).followup_3d,
+  };
+
+  const handleFollowupToggle = (key: FollowupKey, value: boolean) => {
+    updateFollowup.mutate(
+      { sessionId: s.id, key, value },
+      {
+        onError: (err) => toast.error("Erro: " + (err as Error).message),
+      }
+    );
+  };
 
   return (
     <>
@@ -284,6 +309,46 @@ function SessionCard({
             </p>
           </div>
         </div>
+
+        {/* Follow-up toggle columns */}
+        <div className="border-t pt-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-medium">Follow-up</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {FOLLOWUP_OPTIONS.map(({ key, label }) => {
+              const active = followups[key];
+              return (
+                <div
+                  key={key}
+                  className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 transition-colors ${
+                    active
+                      ? "border-primary/40 bg-primary/5"
+                      : "border-border bg-secondary/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {active ? (
+                      <Check className="h-3 w-3 text-primary shrink-0" />
+                    ) : (
+                      <X className="h-3 w-3 text-muted-foreground shrink-0" />
+                    )}
+                    <span className="text-[11px] font-medium truncate">
+                      {label}
+                    </span>
+                  </div>
+                  <Switch
+                    className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span[data-state=checked]]:translate-x-3"
+                    checked={active}
+                    disabled={updateFollowup.isPending}
+                    onCheckedChange={(v) => handleFollowupToggle(key, v)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <SessionSettingsDialog
@@ -293,6 +358,7 @@ function SessionCard({
         sessionName={s.name}
         initialWebhookUrl={savedWebhookUrl}
         initialPrompt={savedPrompt}
+        initialFollowups={followups}
       />
     </>
   );

@@ -269,3 +269,77 @@ export function useAttendantPerformance() {
     refetchInterval: 60_000,
   });
 }
+
+// ── AI/Human Metrics from memoria_crm_creito ─────────────
+export interface MemoriaMetrics {
+  total_messages: number;
+  ai_messages: number;
+  human_messages: number;
+  followup_messages: number;
+  unique_conversations: number;
+  avg_score: number;
+  ai_handled: number;
+  escalated_to_human: number;
+  ai_resolution_rate: number;
+}
+
+export function useMemoriaMetrics() {
+  const { profile } = useAuth();
+  const companyId = profile?.company_id;
+
+  return useQuery({
+    queryKey: ["dashboard-memoria-metrics", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_memoria_metrics", {
+        p_company_id: companyId!,
+      });
+      if (error) throw error;
+      return data as unknown as MemoriaMetrics;
+    },
+    enabled: !!companyId,
+    refetchInterval: 60_000,
+  });
+}
+
+// ── Leads by Score (Hot / Warm / Cold) ───────────────────
+export interface ScoredLead {
+  id: string;
+  name: string;
+  phone: string | null;
+  score: number;
+  created_at: string;
+  company_name: string | null;
+}
+
+export function useLeadsByScore() {
+  const { profile } = useAuth();
+  const companyId = profile?.company_id;
+
+  return useQuery({
+    queryKey: ["dashboard-leads-score", companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contacts")
+        .select("id, name, phone, score, created_at, company_name")
+        .eq("company_id", companyId!)
+        .gt("score", 0)
+        .order("score", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const contacts = (data ?? []) as ScoredLead[];
+
+      // Hot leads: score >= 70 — ready to close
+      const hot = contacts.filter((c) => c.score >= 70);
+      // Warm leads: score 40-69 — need attention
+      const warm = contacts.filter((c) => c.score >= 40 && c.score < 70);
+      // Cold leads: score < 40
+      const cold = contacts.filter((c) => c.score < 40);
+
+      return { hot, warm, cold, all: contacts };
+    },
+    enabled: !!companyId,
+    refetchInterval: 60_000,
+  });
+}

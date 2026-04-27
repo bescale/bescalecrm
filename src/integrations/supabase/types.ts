@@ -32,6 +32,7 @@ export type Database = {
           api_access: boolean
           is_active: boolean
           sort_order: number
+          company_id: string | null
           created_at: string
           updated_at: string
         }
@@ -52,6 +53,7 @@ export type Database = {
           api_access?: boolean
           is_active?: boolean
           sort_order?: number
+          company_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -72,6 +74,7 @@ export type Database = {
           api_access?: boolean
           is_active?: boolean
           sort_order?: number
+          company_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -152,6 +155,7 @@ export type Database = {
           business_area: string | null
           cnpj: string | null
           created_at: string
+          customer_id: string | null
           description: string | null
           id: string
           invite_code: string | null
@@ -162,6 +166,8 @@ export type Database = {
           plan_id: string
           products_services: string | null
           settings: Json | null
+          subscription_id: string | null
+          subscription_link: string | null
           updated_at: string
         }
         Insert: {
@@ -169,6 +175,7 @@ export type Database = {
           business_area?: string | null
           cnpj?: string | null
           created_at?: string
+          customer_id?: string | null
           description?: string | null
           id?: string
           invite_code?: string | null
@@ -179,6 +186,8 @@ export type Database = {
           plan_id?: string
           products_services?: string | null
           settings?: Json | null
+          subscription_id?: string | null
+          subscription_link?: string | null
           updated_at?: string
         }
         Update: {
@@ -186,6 +195,7 @@ export type Database = {
           business_area?: string | null
           cnpj?: string | null
           created_at?: string
+          customer_id?: string | null
           description?: string | null
           id?: string
           invite_code?: string | null
@@ -196,6 +206,8 @@ export type Database = {
           plan_id?: string
           products_services?: string | null
           settings?: Json | null
+          subscription_id?: string | null
+          subscription_link?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -791,6 +803,10 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
+          followup_1d: boolean
+          followup_2d: boolean
+          followup_2h: boolean
+          followup_3d: boolean
           id: string
           name: string
           phone_number: string | null
@@ -804,6 +820,10 @@ export type Database = {
         Insert: {
           company_id: string
           created_at?: string
+          followup_1d?: boolean
+          followup_2d?: boolean
+          followup_2h?: boolean
+          followup_3d?: boolean
           id?: string
           name: string
           phone_number?: string | null
@@ -817,6 +837,10 @@ export type Database = {
         Update: {
           company_id?: string
           created_at?: string
+          followup_1d?: boolean
+          followup_2d?: boolean
+          followup_2h?: boolean
+          followup_3d?: boolean
           id?: string
           name?: string
           phone_number?: string | null

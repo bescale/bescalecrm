@@ -51,23 +51,37 @@ const roleConfig: Record<
 
 /** Extract the real error message from a supabase.functions.invoke response.
  *  supabase-js v2.100+ stores the raw Response object in error.context (FunctionsHttpError).
- *  We need to call .json() on it to read the body.
+ *  The body may already have been consumed by supabase-js — we clone defensively
+ *  before touching it, and read as text first so non-JSON errors still surface.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function extractInvokeError(data: unknown, error: any): Promise<string> {
-  // 1. Some supabase-js versions populate data even on error
   if (typeof data === "object" && data !== null && "error" in data) {
     return (data as { error: string }).error;
   }
 
-  // 2. FunctionsHttpError stores raw Response in error.context (v2.100+)
   if (error?.context) {
     const ctx = error.context;
     if (ctx instanceof Response) {
+      const status = ctx.status;
       try {
-        const body = await ctx.json();
-        if (body?.error) return body.error;
-      } catch { /* body already consumed or not JSON */ }
+        const clone = ctx.clone();
+        const text = await clone.text();
+        if (text) {
+          try {
+            const body = JSON.parse(text);
+            // Corpo do gateway do Supabase: {code, message} ou {msg}
+            if (body?.error) return body.error;
+            if (body?.message) return body.message;
+            if (body?.msg) return body.msg;
+          } catch {
+            return text;
+          }
+        }
+        if (status === 401) {
+          return "Sessão expirada ou JWT inválido. Faça login novamente.";
+        }
+      } catch { /* body unreadable */ }
     } else if (typeof ctx === "object" && ctx?.error) {
       return ctx.error;
     } else if (typeof ctx === "string") {
@@ -79,8 +93,7 @@ async function extractInvokeError(data: unknown, error: any): Promise<string> {
     }
   }
 
-  // 3. Try parsing error.message as JSON (older versions)
-  if (error?.message && error.message !== "Edge Function returned a non-2xx status code") {
+  if (error?.message) {
     try {
       const parsed = JSON.parse(error.message);
       if (parsed?.error) return parsed.error;
@@ -133,34 +146,68 @@ export default function ConfigEquipe() {
   }
 
   async function fetchMembers() {
-    if (!profile?.company_id) return;
-
-    const { data: profiles, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, avatar_url, phone, is_active, created_at")
-      .eq("company_id", profile.company_id)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      toast.error("Erro ao carregar equipe");
+    if (!profile?.company_id) {
+      setMembers([]);
       setLoading(false);
       return;
     }
 
-    // Use SECURITY DEFINER RPC to get all roles (bypasses RLS)
-    const { data: roles } = await supabase.rpc("get_company_team_roles");
+    const companyId = profile.company_id;
 
-    const roleMap = new Map<string, AppRole>();
-    if (roles) {
-      (roles as { user_id: string; role: string }[]).forEach((r) =>
-        roleMap.set(r.user_id, r.role as AppRole),
-      );
+    // select("*") em vez de lista fixa — tolerante a colunas que podem ou não
+    // existir (ex: `email` depende da migration 20260409_profiles_add_email).
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("[team] failed to fetch profiles:", error);
+      setMembers([]);
+      setLoading(false);
+      return;
     }
 
-    const membersWithRoles: TeamMember[] = profiles.map((p) => ({
-      ...p,
-      role: roleMap.get(p.id) || null,
-    }));
+    console.log("[team] fetched profiles:", profiles?.length ?? 0);
+
+    // Defesa em profundidade: garante que nenhum perfil de outra empresa passe
+    // mesmo que a RLS seja acidentalmente relaxada.
+    const companyProfiles = (profiles ?? []).filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (p: any) => p.company_id === companyId,
+    );
+
+    const { data: roles, error: rolesErr } = await supabase.rpc(
+      "get_company_team_roles",
+    );
+    if (rolesErr) {
+      console.error("[team] failed to fetch roles:", rolesErr);
+    }
+
+    const companyUserIds = new Set(companyProfiles.map((p) => p.id));
+    const roleMap = new Map<string, AppRole>();
+    if (roles) {
+      (roles as { user_id: string; role: string }[]).forEach((r) => {
+        if (companyUserIds.has(r.user_id)) {
+          roleMap.set(r.user_id, r.role as AppRole);
+        }
+      });
+    }
+
+    const membersWithRoles: TeamMember[] = companyProfiles.map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (p: any) => ({
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email ?? null,
+        avatar_url: p.avatar_url,
+        phone: p.phone,
+        is_active: p.is_active,
+        created_at: p.created_at,
+        role: roleMap.get(p.id) ?? null,
+      }),
+    );
 
     setMembers(membersWithRoles);
     setLoading(false);
@@ -190,16 +237,67 @@ export default function ConfigEquipe() {
 
     setSending(true);
     try {
-      // Same pattern as whatsapp-messages (no custom headers — client sends JWT automatically)
-      const { data, error } = await supabase.functions.invoke(
-        "invite-member",
-        { body: { email, name, role: inviteRole } },
-      );
+      // 1. Força renovação do token (getSession() só lê do storage — não renova)
+      const { data: refreshData, error: refreshErr } =
+        await supabase.auth.refreshSession();
 
-      if (error || data?.error) {
-        const msg = await extractInvokeError(data, error);
-        console.error("invite-member error:", { data, error });
-        throw new Error(msg);
+      // Se refresh falhar, tenta o session atual antes de desistir
+      let accessToken = refreshData?.session?.access_token;
+      if (!accessToken) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        accessToken = sessionData.session?.access_token;
+      }
+
+      if (!accessToken) {
+        console.error("session refresh failed:", refreshErr);
+        toast.error("Sua sessão expirou. Faça login novamente.");
+        navigate("/login");
+        return;
+      }
+
+      // 2. Chama a Edge Function via fetch direto — controle total dos headers
+      const supabaseUrl = "https://xhfpjtswcsotfdssgxsh.supabase.co";
+      const anonKey =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((supabase as any).supabaseKey as string | undefined) ?? "";
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/invite-member`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ email, name, role: inviteRole }),
+      });
+
+      const rawText = await resp.text();
+      console.log("invite-member response:", resp.status, rawText);
+
+      let data: { error?: string; message?: string; invite_link?: string } | null = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        // resposta não-JSON (normalmente erro do gateway)
+      }
+
+      if (!resp.ok || data?.error) {
+        const serverMsg =
+          data?.error ||
+          data?.message ||
+          rawText ||
+          `HTTP ${resp.status}`;
+        console.error("invite-member error:", {
+          status: resp.status,
+          body: rawText,
+          parsed: data,
+        });
+        if (resp.status === 401) {
+          throw new Error(
+            `Não autorizado (401): ${serverMsg}. Tente sair e entrar novamente.`,
+          );
+        }
+        throw new Error(serverMsg);
       }
 
       toast.success(data?.message || `Convite enviado para ${email}`);
